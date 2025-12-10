@@ -110,6 +110,33 @@
         </main>
     </div>
 
+    <!-- Type Selection Modal -->
+    <div id="type-selection-modal" class="modal hidden">
+        <div class="modal-content type-selection-content">
+            <div class="modal-header">
+                <h2>Select Reservation Type</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body type-grid">
+                <button class="type-card" data-type="GUEST_SUITE">
+                    <div class="type-icon">🛏️</div>
+                    <h3>Guest Suite</h3>
+                    <p>Book a suite for your guests. 2-night minimum.</p>
+                </button>
+                <button class="type-card" data-type="SKY_LOUNGE">
+                    <div class="type-icon">🍸</div>
+                    <h3>Sky Lounge</h3>
+                    <p>Reserve the lounge for events. 4-hour limit.</p>
+                </button>
+                <button class="type-card" data-type="GEAR_SHED">
+                    <div class="type-icon">🚲</div>
+                    <h3>Gear Shed</h3>
+                    <p>Borrow kayaks, bikes, and more.</p>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Reservation Modal -->
     <div id="reservation-modal" class="modal hidden">
         <div class="modal-content">
@@ -121,20 +148,11 @@
                 <form id="reservation-form">
                     <input type="hidden" id="res-id">
                     <input type="hidden" id="res-tx-id">
+                    <input type="hidden" id="res-type">
 
                     <div class="form-group">
                         <label for="res-unit">Unit Number</label>
                         <input type="text" id="res-unit" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="res-type">Resource Type</label>
-                        <select id="res-type" required>
-                            <option value="">Select Type...</option>
-                            <option value="GUEST_SUITE">Guest Suite</option>
-                            <option value="SKY_LOUNGE">Sky Lounge</option>
-                            <option value="GEAR_SHED">Gear Shed</option>
-                        </select>
                     </div>
 
                     <div class="form-group" id="item-select-group">
@@ -142,22 +160,24 @@
                         <select id="res-item" required multiple class="multi-select">
                             <!-- Populated dynamically -->
                         </select>
+                        <small class="form-hint">Hold Ctrl/Cmd to select multiple items (Gear Shed only)</small>
                     </div>
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="res-start">Start Time</label>
-                            <input type="datetime-local" id="res-start" required>
+                            <label>Start</label>
+                            <div class="split-inputs">
+                                <input type="date" id="res-start-date" required>
+                                <input type="time" id="res-start-time" required>
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label for="res-end">End Time</label>
-                            <input type="datetime-local" id="res-end" required>
+                            <label>End</label>
+                            <div class="split-inputs">
+                                <input type="date" id="res-end-date" required>
+                                <input type="time" id="res-end-time" required>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="form-group hidden" id="price-container">
-                        <label>Estimated Cost</label>
-                        <div id="res-price" class="price-display">$0.00</div>
                     </div>
 
                     <div class="form-group hidden" id="price-container">
