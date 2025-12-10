@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amenity Scheduler</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- FullCalendar -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="overlay active">
+        <div class="login-card">
+            <h1>Amenity Scheduler</h1>
+            <p>Please sign in to access the dashboard.</p>
+            <div id="g_id_onload"
+                data-client_id="AKfycbwBvxglvH9VVLCMsCAouOGkkbush0V3oMGYR7bw8JnA7JL5i0YiGE5GkYwmBA5ZTscQ5g"
+                data-callback="handleCredentialResponse" data-auto_prompt="false">
+            </div>
+            <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline"
+                data-text="sign_in_with" data-shape="rectangular" data-logo_alignment="left">
+            </div>
+            <p id="login-error" class="error-message"></p>
+        </div>
+    </div>
+
+    <!-- App Container -->
+    <div id="app-container" class="hidden">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo">Beacon 85</div>
+                <nav class="main-nav">
+                    <button id="view-calendar" class="nav-btn active">Calendar</button>
+                    <button id="view-list" class="nav-btn">List View</button>
+                </nav>
+            </div>
+            <div class="header-right">
+                <button id="new-reservation-btn" class="primary-btn">+ New Reservation</button>
+                <div class="user-profile">
+                    <span id="user-email"></span>
+                    <button id="logout-btn" class="icon-btn" title="Logout">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Alerts -->
+        <div id="alert-container"></div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Calendar View -->
+            <div id="calendar-view" class="view-section active">
+                <div id="calendar"></div>
+            </div>
+
+            <!-- List View -->
+            <div id="list-view" class="view-section hidden">
+                <div class="list-controls">
+                    <input type="text" id="search-reservations" placeholder="Search reservations...">
+                    <select id="filter-status">
+                        <option value="all">All Statuses</option>
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="Complete">Complete</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="reservations-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Unit</th>
+                                <th>Item</th>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="pagination-controls">
+                    <!-- Pagination -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Reservation Modal -->
+    <div id="reservation-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">New Reservation</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="reservation-form">
+                    <input type="hidden" id="res-id">
+                    <input type="hidden" id="res-tx-id">
+
+                    <div class="form-group">
+                        <label for="res-unit">Unit Number</label>
+                        <input type="text" id="res-unit" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="res-type">Resource Type</label>
+                        <select id="res-type" required>
+                            <option value="">Select Type...</option>
+                            <option value="GUEST_SUITE">Guest Suite</option>
+                            <option value="SKY_LOUNGE">Sky Lounge</option>
+                            <option value="GEAR_SHED">Gear Shed</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="item-select-group">
+                        <label for="res-item">Item</label>
+                        <select id="res-item" required>
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="res-start">Start Time</label>
+                            <input type="datetime-local" id="res-start" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="res-end">End Time</label>
+                            <input type="datetime-local" id="res-end" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group hidden" id="override-container">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="res-override">
+                            Override Lock (Requires Verification)
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="res-notes">Rental Notes</label>
+                        <textarea id="res-notes" rows="3"></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="secondary-btn close-modal">Cancel</button>
+                        <button type="submit" class="primary-btn">Save Reservation</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
