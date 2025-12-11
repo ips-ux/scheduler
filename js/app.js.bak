@@ -232,7 +232,6 @@ const App = {
 
     handleTypeLogic: (type) => {
         const itemSelect = document.getElementById('res-item');
-        const itemSelectGroup = document.getElementById('item-select-group');
         const overrideContainer = document.getElementById('override-container');
         const priceContainer = document.getElementById('price-container');
 
@@ -241,80 +240,26 @@ const App = {
         const endDate = document.getElementById('res-end-date');
         const endTime = document.getElementById('res-end-time');
 
+        // Filter items (Case-insensitive)
+        itemSelect.innerHTML = '';
+
         // Reset custom picker flag
         startTime.removeAttribute('data-custom-picker');
 
-        // Clear items
-        itemSelect.innerHTML = '';
+        const filteredItems = App.items.filter(i => i.resource_type && i.resource_type.toLowerCase() === type.toLowerCase());
 
-
-
-        // Hide item selector for Guest Suite and Sky Lounge (space itself is the item)
-        if (type === 'GUEST_SUITE' || type === 'SKY_LOUNGE') {
-            itemSelectGroup.classList.add('hidden');
-
-            // Auto-select the space name as the item
+        if (filteredItems.length === 0) {
             const option = document.createElement('option');
-            option.value = type === 'GUEST_SUITE' ? 'Guest Suite' : 'Sky Lounge';
-            option.textContent = option.value;
-            option.selected = true;
+            option.textContent = 'No items found';
             itemSelect.appendChild(option);
-        } else {
-            // Show item selector for Gear Shed
-            itemSelectGroup.classList.remove('hidden');
-
-            // Get UI elements
-            const itemSearch = document.getElementById('item-search');
-            const itemDualPanel = document.getElementById('item-dual-panel');
-            const itemHint = document.getElementById('item-hint');
-
-            // For Gear Shed: show checkbox UI, hide select
-            if (type === 'GEAR_SHED') {
-                itemSelect.style.display = 'none';
-                itemHint.style.display = 'none';
-                itemSearch.style.display = 'block';
-                itemDualPanel.style.display = 'flex';
-
-                // Filter items (Case-insensitive)
-                const filteredItems = App.items.filter(i => i.resource_type && i.resource_type.toLowerCase() === type.toLowerCase());
-
-                // Store for search filtering
-                App.currentGearShedItems = filteredItems;
-
-                // Initialize selected items
-                App.selectedGearShedItems = [];
-                
-                // Render dual-panel
-                App.renderGearShedDualPanel();
-
-                // Bind search
-                itemSearch.value = '';
-                itemSearch.removeEventListener('input', App.handleGearShedSearch); // Remove old
-                itemSearch.addEventListener('input', App.handleGearShedSearch);
-            } else {
-                // Other types: use select element
-                itemSelect.style.display = 'block';
-                itemHint.style.display = 'block';
-                itemSearch.style.display = 'none';
-                itemDualPanel.style.display = 'none';
-
-                // Filter items (Case-insensitive)
-                const filteredItems = App.items.filter(i => i.resource_type && i.resource_type.toLowerCase() === type.toLowerCase());
-
-                if (filteredItems.length === 0) {
-                    const option = document.createElement('option');
-                    option.textContent = 'No items found';
-                    itemSelect.appendChild(option);
-                }
-
-                filteredItems.forEach(i => {
-                    const option = document.createElement('option');
-                    option.value = i.item;
-                    option.textContent = i.item;
-                    itemSelect.appendChild(option);
-                });
-            }
         }
+
+        filteredItems.forEach(i => {
+            const option = document.createElement('option');
+            option.value = i.item;
+            option.textContent = i.item;
+            itemSelect.appendChild(option);
+        });
 
         // Logic based on type
         if (type === 'GEAR_SHED') {
@@ -422,118 +367,6 @@ const App = {
             priceDisplay.textContent = '$0.00';
         }
     },
-    // --- Gear Shed Checkbox Functions ---
-
-    renderGearShedDualPanel: () => {
-        const availableList = document.getElementById('item-available-list');
-        const selectedList = document.getElementById('item-selected-list');
-        
-        // Get available items (not selected)
-        const availableItems = App.currentGearShedItems.filter(item => 
-            !App.selectedGearShedItems.includes(item.item)
-        );
-        
-        // Render available items
-        availableList.innerHTML = '';
-        if (availableItems.length === 0) {
-            availableList.innerHTML = '<div class="item-list-empty">No items available</div>';
-        } else {
-            availableItems.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'item-list-item';
-                div.textContent = item.item;
-                div.dataset.itemName = item.item;
-                div.addEventListener('click', () => App.moveToSelected(item.item));
-                availableList.appendChild(div);
-            });
-        }
-        
-        // Render selected items
-        selectedList.innerHTML = '';
-        if (App.selectedGearShedItems.length === 0) {
-            selectedList.innerHTML = '<div class="item-list-empty">No items selected</div>';
-        } else {
-            App.selectedGearShedItems.forEach(itemName => {
-                const div = document.createElement('div');
-                div.className = 'item-list-item';
-                div.textContent = itemName;
-                div.dataset.itemName = itemName;
-                div.addEventListener('click', () => App.moveToAvailable(itemName));
-                selectedList.appendChild(div);
-            });
-        }
-    },
-
-    handleGearShedSearch: () => {
-        const query = document.getElementById('item-search').value;
-        const filteredItems = App.filterGearShedItems(query, App.currentGearShedItems);
-        App.renderGearShedDualPanel();
-    },
-
-    filterGearShedItems: (query, items) => {
-        if (!query.trim()) return items;
-
-        // Parse query for modifiers
-        const exactPhrases = [];
-        const exclusions = [];
-        const wildcards = [];
-
-        // Extract exact phrases "..."
-        let remaining = query.replace(/"([^"]+)"/g, (match, phrase) => {
-            exactPhrases.push(phrase.toLowerCase());
-            return '';
-        });
-
-        // Extract tokens
-        const tokens = remaining.split(/\s+/).filter(t => t.length > 0);
-
-        tokens.forEach(token => {
-            if (token.startsWith('-')) {
-                exclusions.push(token.substring(1).toLowerCase());
-            } else {
-                wildcards.push(token.toLowerCase());
-            }
-        });
-
-        // Filter items
-        return items.filter(item => {
-            const itemLower = item.item.toLowerCase();
-
-            // Check exclusions (must NOT match)
-            for (let exc of exclusions) {
-                if (itemLower.includes(exc)) return false;
-            }
-
-            // Check exact phrases (must match ALL)
-            for (let phrase of exactPhrases) {
-                if (!itemLower.includes(phrase)) return false;
-            }
-
-            // Check wildcards (must match ALL)
-            for (let wild of wildcards) {
-                const regex = new RegExp(wild.replace(/\*/g, '.*'), 'i');
-                if (!regex.test(itemLower)) return false;
-            }
-
-            return true;
-        });
-    },
-
-    moveToSelected: (itemName) => {
-        if (!App.selectedGearShedItems.includes(itemName)) {
-            App.selectedGearShedItems.push(itemName);
-            App.selectedGearShedItems.sort();
-            App.renderGearShedDualPanel();
-        }
-    },
-    
-    moveToAvailable: (itemName) => {
-        const index = App.selectedGearShedItems.indexOf(itemName);
-        if (index > -1) {
-            App.selectedGearShedItems.splice(index, 1);
-            App.renderGearShedDualPanel();
-        }
-    },
 
     handleFormSubmit: async (e) => {
         e.preventDefault();
@@ -541,15 +374,8 @@ const App = {
         const type = document.getElementById('res-type').value;
         const itemSelect = document.getElementById('res-item');
 
-        // Handle Multi-select - different logic for Gear Shed vs others
-        let selectedItems;
-        if (type === 'GEAR_SHED') {
-            // Get selected items from right panel
-            selectedItems = App.selectedGearShedItems || [];
-        } else {
-            // Get from select element (Guest Suite/Sky Lounge)
-            selectedItems = Array.from(itemSelect.selectedOptions).map(opt => opt.value);
-        }
+        // Handle Multi-select
+        const selectedItems = Array.from(itemSelect.selectedOptions).map(opt => opt.value);
 
         if (selectedItems.length === 0) {
             App.showAlert('Please select at least one item.', 'error');
@@ -769,99 +595,28 @@ const App = {
         });
     },
 
-    updateAMPMFromHour: () => {
-        const hourCol = document.getElementById('picker-hour');
-        const ampmCol = document.getElementById('picker-ampm');
-        if (!hourCol || !ampmCol) return;
+    openTimePicker: (inputId) => {
+        App.activeTimeInput = inputId;
+        const input = document.getElementById(inputId);
 
-        const hourItems = hourCol.querySelectorAll('.picker-item');
-        const colCenter = hourCol.scrollTop + 120;
+        // Don't open if field is read-only
+        if (input.readOnly) return;
 
-        let selectedHour = null;
-        let minDiff = Infinity;
+        const popover = document.getElementById('time-picker-popover');
 
-        hourItems.forEach(item => {
-            const itemCenter = item.offsetTop + 24;
-            const diff = Math.abs(colCenter - itemCenter);
-            if (diff < minDiff) {
-                minDiff = diff;
-                selectedHour = item;
-            }
-        });
+        // Position Popover below the input
+        const rect = input.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
-        if (selectedHour) {
-            const ampm = selectedHour.dataset.ampm;
-            const ampmItems = ampmCol.querySelectorAll('.picker-item');
+        popover.style.top = `${rect.bottom + scrollTop + 8}px`;
+        popover.style.left = `${rect.left + scrollLeft}px`;
 
-            ampmItems.forEach(item => {
-                if (item.dataset.value === ampm) {
-                    const scrollTo = item.offsetTop - 96;
-                    ampmCol.scrollTo({ top: scrollTo, behavior: 'smooth' });
-                }
-            });
-        }
+        popover.classList.remove('hidden');
+
+        // Initialize scroll positions based on current value or default
+        App.setInitialPickerValue(input.value || '16:00');
     },
-
-    lockMinutesIfNeeded: () => {
-        const hourCol = document.getElementById('picker-hour');
-        const minCol = document.getElementById('picker-minute');
-        if (!hourCol || !minCol) return;
-
-        const hourItems = hourCol.querySelectorAll('.picker-item');
-        const colCenter = hourCol.scrollTop + 120;
-
-        let selectedHour = null;
-        let minDiff = Infinity;
-
-        hourItems.forEach(item => {
-            const itemCenter = item.offsetTop + 24;
-            const diff = Math.abs(colCenter - itemCenter);
-            if (diff < minDiff) {
-                minDiff = diff;
-                selectedHour = item;
-            }
-        });
-
-        if (selectedHour && parseInt(selectedHour.dataset.value) === 6) {
-            const minItems = minCol.querySelectorAll('.picker-item');
-            minItems.forEach(item => {
-                if (item.dataset.value === '00') {
-                    const scrollTo = item.offsetTop - 96;
-                    minCol.scrollTo({ top: scrollTo, behavior: 'smooth' });
-                }
-            });
-
-            minCol.style.pointerEvents = 'none';
-            minCol.style.opacity = '0.5';
-        } else {
-            minCol.style.pointerEvents = 'auto';
-            minCol.style.opacity = '1';
-        }
-    },
-
-    openTimePicker:
-        (inputId) => {
-            App.activeTimeInput = inputId;
-            const input = document.getElementById(inputId);
-
-            // Don't open if field is read-only
-            if (input.readOnly) return;
-
-            const popover = document.getElementById('time-picker-popover');
-
-            // Position Popover below the input
-            const rect = input.getBoundingClientRect();
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-
-            popover.style.top = `${rect.bottom + scrollTop + 8}px`;
-            popover.style.left = `${rect.left + scrollLeft}px`;
-
-            popover.classList.remove('hidden');
-
-            // Initialize scroll positions based on current value or default
-            App.setInitialPickerValue(input.value || '16:00');
-        },
 
     setInitialPickerValue: (timeStr) => {
         // Parse time string (HH:MM) and scroll to appropriate positions

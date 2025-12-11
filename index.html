@@ -119,17 +119,17 @@
             </div>
             <div class="modal-body type-grid">
                 <button class="type-card" data-type="GUEST_SUITE">
-                    <div class="type-icon">🛏️</div>
+                    <div class="type-icon">🏠</div>
                     <h3>Guest Suite</h3>
                     <p>Book a suite for your guests. 2-night minimum.</p>
                 </button>
                 <button class="type-card" data-type="SKY_LOUNGE">
-                    <div class="type-icon">🍸</div>
+                    <div class="type-icon">🌆</div>
                     <h3>Sky Lounge</h3>
                     <p>Reserve the lounge for events. 4-hour limit.</p>
                 </button>
                 <button class="type-card" data-type="GEAR_SHED">
-                    <div class="type-icon">🚲</div>
+                    <div class="type-icon">🎿</div>
                     <h3>Gear Shed</h3>
                     <p>Borrow kayaks, bikes, and more.</p>
                 </button>
@@ -157,10 +157,19 @@
 
                     <div class="form-group" id="item-select-group">
                         <label for="res-item">Item(s)</label>
+
+                        <!-- Search Bar (only for Gear Shed) -->
+                        <input type="text" id="item-search" class="item-search"
+                            placeholder="Search... (* wildcard, - exclude, &quot;exact&quot;)" style="display:none;">
+
+                        <!-- Checkbox List Container (only for Gear Shed) -->                        <!-- Dual Panel Container (only for Gear Shed) -->                        <div id="item-dual-panel" class="item-dual-panel" style="display:none;">                            <!-- Available Items (Left) -->                            <div class="item-panel">                                <div class="panel-header">Available Items</div>                                <div id="item-available-list" class="item-list">                                    <!-- Available items injected by JS -->                                </div>                            </div>                                                        <!-- Selected Items (Right) -->                            <div class="item-panel">                                <div class="panel-header">Selected Items</div>                                <div id="item-selected-list" class="item-list">                                    <!-- Selected items injected by JS -->                                </div>                            </div>                        </div>
+
+                        <!-- Original select (hidden for Gear Shed, used for Guest Suite/Sky Lounge) -->
                         <select id="res-item" required multiple class="multi-select">
                             <!-- Populated dynamically -->
                         </select>
-                        <small class="form-hint">Hold Ctrl/Cmd to select multiple items (Gear Shed only)</small>
+                        <small class="form-hint" id="item-hint">Hold Ctrl/Cmd to select multiple items (Gear Shed
+                            only)</small>
                     </div>
 
                     <div class="form-row">
@@ -188,7 +197,7 @@
                     <div class="form-group hidden" id="override-container">
                         <label class="checkbox-label">
                             <input type="checkbox" id="res-override">
-                            Override Lock (Requires Verification)
+                            Double Booking Override
                         </label>
                     </div>
 
@@ -202,6 +211,29 @@
                         <button type="submit" class="primary-btn">Save Reservation</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Time Picker Popover -->
+    <div id="time-picker-popover" class="popover hidden">
+        <div class="popover-content">
+            <div class="time-picker-wheel">
+                <div class="picker-column" id="picker-hour">
+                    <!-- Hours injected by JS -->
+                </div>
+                <div class="picker-column" id="picker-minute">
+                    <!-- Minutes injected by JS -->
+                </div>
+                <div class="picker-column picker-column-readonly" id="picker-ampm">
+
+                    <!-- AM/PM injected by JS (auto-updates based on hour) -->
+
+                </div>
+                <div class="picker-highlight"></div>
+            </div>
+            <div class="popover-actions">
+                <button type="button" class="primary-btn" id="time-picker-ok">OK</button>
             </div>
         </div>
     </div>

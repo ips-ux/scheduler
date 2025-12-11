@@ -1,0 +1,73 @@
+    },
+
+    updateAMPMFromHour: () => {
+        const hourCol = document.getElementById('picker-hour');
+        const ampmCol = document.getElementById('picker-ampm');
+        if (!hourCol || !ampmCol) return;
+        
+        const hourItems = hourCol.querySelectorAll('.picker-item');
+        const colCenter = hourCol.scrollTop + 120;
+        
+        let selectedHour = null;
+        let minDiff = Infinity;
+        
+        hourItems.forEach(item => {
+            const itemCenter = item.offsetTop + 24;
+            const diff = Math.abs(colCenter - itemCenter);
+            if (diff < minDiff) {
+                minDiff = diff;
+                selectedHour = item;
+            }
+        });
+        
+        if (selectedHour) {
+            const ampm = selectedHour.dataset.ampm;
+            const ampmItems = ampmCol.querySelectorAll('.picker-item');
+            
+            ampmItems.forEach(item => {
+                if (item.dataset.value === ampm) {
+                    const scrollTo = item.offsetTop - 96;
+                    ampmCol.scrollTo({ top: scrollTo, behavior: 'smooth' });
+                }
+            });
+        }
+    },
+    
+    lockMinutesIfNeeded: () => {
+        const hourCol = document.getElementById('picker-hour');
+        const minCol = document.getElementById('picker-minute');
+        if (!hourCol || !minCol) return;
+        
+        const hourItems = hourCol.querySelectorAll('.picker-item');
+        const colCenter = hourCol.scrollTop + 120;
+        
+        let selectedHour = null;
+        let minDiff = Infinity;
+        
+        hourItems.forEach(item => {
+            const itemCenter = item.offsetTop + 24;
+            const diff = Math.abs(colCenter - itemCenter);
+            if (diff < minDiff) {
+                minDiff = diff;
+                selectedHour = item;
+            }
+        });
+        
+        if (selectedHour && parseInt(selectedHour.dataset.value) === 6) {
+            const minItems = minCol.querySelectorAll('.picker-item');
+            minItems.forEach(item => {
+                if (item.dataset.value === '00') {
+                    const scrollTo = item.offsetTop - 96;
+                    minCol.scrollTo({ top: scrollTo, behavior: 'smooth' });
+                }
+            });
+            
+            minCol.style.pointerEvents = 'none';
+            minCol.style.opacity = '0.5';
+        } else {
+            minCol.style.pointerEvents = 'auto';
+            minCol.style.opacity = '1';
+        }
+    },
+
+    openTimePicker:

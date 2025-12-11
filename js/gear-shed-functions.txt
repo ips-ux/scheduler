@@ -1,0 +1,104 @@
+    // --- Gear Shed Checkbox Functions ---
+    
+    renderGearShedCheckboxes: (items) => {
+        const container = document.getElementById('item-checkbox-list');
+        container.innerHTML = '';
+        
+        if (items.length === 0) {
+            container.innerHTML = '<div class="no-items-found">No items found matching your search</div>';
+            return;
+        }
+        
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'item-checkbox-item';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `item-${item.item.replace(/\s+/g, '-')}`;
+            checkbox.value = item.item;
+            checkbox.name = 'gear-shed-items';
+            
+            const label = document.createElement('label');
+            label.htmlFor = checkbox.id;
+            label.textContent = item.item;
+            
+            div.appendChild(checkbox);
+            div.appendChild(label);
+            container.appendChild(div);
+            
+            // Make entire div clickable
+            div.addEventListener('click', (e) => {
+                if (e.target !== checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                }
+            });
+        });
+    },
+    
+    handleGearShedSearch: () => {
+        const query = document.getElementById('item-search').value;
+        const filteredItems = App.filterGearShedItems(query, App.currentGearShedItems);
+        App.renderGearShedCheckboxes(filteredItems);
+    },
+    
+    filterGearShedItems: (query, items) => {
+        if (!query.trim()) return items;
+        
+        // Parse query for modifiers
+        const exactPhrases = [];
+        const exclusions = [];
+        const wildcards = [];
+        
+        // Extract exact phrases "..."
+        let remaining = query.replace(/"([^"]+)"/g, (match, phrase) => {
+            exactPhrases.push(phrase.toLowerCase());
+            return '';
+        });
+        
+        // Extract tokens
+        const tokens = remaining.split(/\s+/).filter(t => t.length > 0);
+        
+        tokens.forEach(token => {
+            if (token.startsWith('-')) {
+                exclusions.push(token.substring(1).toLowerCase());
+            } else {
+                wildcards.push(token.toLowerCase());
+            }
+        });
+        
+        // Filter items
+        return items.filter(item => {
+            const itemLower = item.item.toLowerCase();
+            
+            // Check exclusions (must NOT match)
+            for (let exc of exclusions) {
+                if (itemLower.includes(exc)) return false;
+            }
+            
+            // Check exact phrases (must match ALL)
+            for (let phrase of exactPhrases) {
+                if (!itemLower.includes(phrase)) return false;
+            }
+            
+            // Check wildcards (must match ALL)
+            for (let wild of wildcards) {
+                const regex = new RegExp(wild.replace(/\*/g, '.*'), 'i');
+                if (!regex.test(itemLower)) return false;
+            }
+            
+            return true;
+        });
+    },
+    
+    selectAllGearShedItems: () => {
+        const checkboxes = document.querySelectorAll('#item-checkbox-list input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = true);
+    },
+    
+    clearAllGearShedItems: () => {
+        const checkboxes = document.querySelectorAll('#item-checkbox-list input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = false);
+    },
+    
+    handleFormSubmit:

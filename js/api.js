@@ -3,7 +3,7 @@
  * Handles communication with Google Apps Script Web App
  */
 
-const API_URL = 'YOUR_GAS_WEB_APP_URL'; // Placeholder
+const API_URL = 'https://script.google.com/macros/s/AKfycbxFtnSX9H2Gf300S0uJH5JOrNPZeXPaGdNfvxlLCRDH_lNb4ht3VtPMSuxEJ3gbpuZhKQ/exec';
 
 const API = {
     // Check if API is configured
@@ -23,9 +23,13 @@ const API = {
             // However, for a standard setup, we'll try standard POST with text/plain to avoid preflight if possible,
             // or rely on the GAS script handling CORS correctly (doGet/doPost).
             // A common pattern for GAS is sending data as JSON string in body.
-            
+
             const response = await fetch(API_URL, {
                 method: 'POST',
+                redirect: 'follow',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8'
+                },
                 body: JSON.stringify({ action, ...payload })
             });
 

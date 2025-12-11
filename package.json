@@ -1,0 +1,25 @@
+{
+  "name": "scheduler",
+  "version": "1.0.0",
+  "description": "A secure, serverless internal Office Amenity Scheduler Tool.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "live-server",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ips-ux/scheduler.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ips-ux/scheduler/issues"
+  },
+  "homepage": "https://github.com/ips-ux/scheduler#readme",
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  }
+}
