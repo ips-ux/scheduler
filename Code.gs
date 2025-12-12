@@ -36,6 +36,9 @@ function handleRequest(e) {
       case 'getItems':
         result = getItems();
         break;
+      case 'getStaff':
+        result = getStaff();
+        break;
       case 'createReservation':
         result = createReservation(params.reservation);
         break;
@@ -44,6 +47,12 @@ function handleRequest(e) {
         break;
       case 'cancelReservation':
         result = cancelReservation(params.tx_id);
+        break;
+      case 'deleteReservation':
+        result = deleteReservation(params.tx_id);
+        break;
+      case 'restoreReservation':
+        result = restoreReservation(params.tx_id);
         break;
       default:
         result = { status: 'error', message: 'Invalid action' };
@@ -80,14 +89,28 @@ function getItems() {
   const sheet = getDb().getSheetByName('rentable_items');
   const data = sheet.getDataRange().getValues();
   const headers = data.shift();
-  
+
   const items = data.map(row => {
     let obj = {};
     headers.forEach((h, i) => obj[h] = row[i]);
     return obj;
   });
-  
+
   return { status: 'success', data: items };
+}
+
+function getStaff() {
+  const sheet = getDb().getSheetByName('staff');
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+
+  const staff = data.map(row => {
+    let obj = {};
+    headers.forEach((h, i) => obj[h] = row[i]);
+    return obj;
+  });
+
+  return { status: 'success', data: staff };
 }
 
 // --- Logic & Validation ---
@@ -149,22 +172,21 @@ function createReservation(res) {
   
   items.forEach(item => {
     sheet.appendRow([
-      res.rented_to,      // A
-      item,               // B
-      'Scheduled',        // C
-      'Staff',            // D
-      res.start_time,     // E
-      res.end_time,       // F
-      cost,               // G (Apply full cost to every row? Or just first? Usually 0 for multi-item)
-                          // If Sky Lounge ($300), it's single item.
-                          // If Gear Shed ($0), it's 0.
-                          // So it's fine.
-      '',                 // H
-      res.rental_notes,   // I
-      '',                 // J
-      res.resource_type,  // K
-      res.override_lock,  // L
-      tx_id               // M
+      res.rented_to,             // A - rented_to
+      item,                      // B - item
+      'Scheduled',               // C - status
+      res.scheduled_by || 'Staff', // D - scheduled_by
+      res.start_time,            // E - start_time
+      res.end_time,              // F - end_time
+      cost,                      // G - total_cost
+      '',                        // H - completed_by (empty on creation)
+      res.rental_notes,          // I - rental_notes
+      '',                        // J - return_notes (empty on creation)
+      res.resource_type,         // K - resource_type
+      res.override_lock,         // L - override_lock
+      '',                        // M - edit_by (empty on creation)
+      '',                        // N - last_update (empty on creation)
+      tx_id                      // O - tx_id
     ]);
   });
   
@@ -177,7 +199,7 @@ function updateReservation(res) {
   const data = sheet.getDataRange().getValues();
   
   // Find row index (1-based)
-  const rowIndex = data.findIndex(row => row[12] === res.tx_id);
+  const rowIndex = data.findIndex(row => row[14] === res.tx_id); // Column O (tx_id)
   if (rowIndex === -1) return { status: 'error', message: 'Reservation not found' };
   
   // Enforce Time Defaults (Same as create)
@@ -202,16 +224,27 @@ function updateReservation(res) {
   
   // Update row
   const sheetRow = rowIndex + 1;
-  
+
   sheet.getRange(sheetRow, 1).setValue(res.rented_to);
   sheet.getRange(sheetRow, 2).setValue(res.item);
+  if (res.scheduled_by) {
+    sheet.getRange(sheetRow, 4).setValue(res.scheduled_by);
+  }
   sheet.getRange(sheetRow, 5).setValue(res.start_time);
   sheet.getRange(sheetRow, 6).setValue(res.end_time);
   sheet.getRange(sheetRow, 7).setValue(cost);
   sheet.getRange(sheetRow, 9).setValue(res.rental_notes);
   sheet.getRange(sheetRow, 11).setValue(res.resource_type);
   sheet.getRange(sheetRow, 12).setValue(res.override_lock);
-  
+
+  // Track edits
+  if (res.edit_by) {
+    sheet.getRange(sheetRow, 13).setValue(res.edit_by); // Column M
+  }
+  if (res.last_update) {
+    sheet.getRange(sheetRow, 14).setValue(res.last_update); // Column N
+  }
+
   return { status: 'success' };
 }
 
@@ -223,7 +256,7 @@ function cancelReservation(tx_id) {
   // Find ALL rows with this tx_id
   const rowsToUpdate = [];
   data.forEach((row, i) => {
-    if (row[12] === tx_id) rowsToUpdate.push(i + 1);
+    if (row[14] === tx_id) rowsToUpdate.push(i + 1); // Column O (tx_id)
   });
   
   if (rowsToUpdate.length === 0) return { status: 'error', message: 'Reservation not found' };
@@ -253,6 +286,80 @@ function cancelReservation(tx_id) {
   return { status: 'success', fee: fee };
 }
 
+function deleteReservation(tx_id) {
+  const db = getDb();
+  const sheet = db.getSheetByName('reservations');
+  const data = sheet.getDataRange().getValues();
+
+  // Find ALL rows with this tx_id (collect row indices)
+  const rowsToDelete = [];
+  data.forEach((row, i) => {
+    if (i === 0) return; // Skip header row
+    if (row[14] === tx_id) rowsToDelete.push(i + 1); // Column O (tx_id), 1-based row index
+  });
+
+  if (rowsToDelete.length === 0) {
+    return { status: 'error', message: 'Reservation not found' };
+  }
+
+  // Delete rows in reverse order to avoid index shifting issues
+  rowsToDelete.reverse().forEach(rowIndex => {
+    sheet.deleteRow(rowIndex);
+  });
+
+  return { status: 'success', message: `Deleted ${rowsToDelete.length} row(s)` };
+}
+
+function restoreReservation(tx_id) {
+  const db = getDb();
+  const sheet = db.getSheetByName('reservations');
+  const data = sheet.getDataRange().getValues();
+
+  // Find ALL rows with this tx_id
+  const rowsToRestore = [];
+  data.forEach((row, i) => {
+    if (i === 0) return; // Skip header row
+    if (row[14] === tx_id) rowsToRestore.push({ index: i + 1, row: row }); // Column O (tx_id), 1-based row index
+  });
+
+  if (rowsToRestore.length === 0) {
+    return { status: 'error', message: 'Reservation not found' };
+  }
+
+  // Use first row for validation and cost recalculation
+  const firstRow = rowsToRestore[0].row;
+
+  // Recreate reservation object for validation
+  const res = {
+    tx_id: tx_id,
+    rented_to: firstRow[0],
+    item: firstRow[1],
+    resource_type: firstRow[10],
+    start_time: firstRow[4],
+    end_time: firstRow[5],
+    rental_notes: firstRow[8],
+    override_lock: firstRow[11]
+  };
+
+  // Validate that the reservation can be restored (check for conflicts)
+  const validation = validateReservation(res, db, tx_id);
+  if (!validation.valid) {
+    return { status: 'error', message: `Cannot restore: ${validation.message}` };
+  }
+
+  // Recalculate cost
+  const cost = calculateCost(res);
+
+  // Restore all rows with this tx_id
+  rowsToRestore.forEach(item => {
+    const rowIndex = item.index;
+    sheet.getRange(rowIndex, 3).setValue('Scheduled'); // Status column (C)
+    sheet.getRange(rowIndex, 7).setValue(cost); // Cost column (G)
+  });
+
+  return { status: 'success', message: `Restored ${rowsToRestore.length} row(s)` };
+}
+
 function validateReservation(res, db, excludeTxId = null) {
   const start = new Date(res.start_time);
   const end = new Date(res.end_time);
@@ -265,7 +372,7 @@ function validateReservation(res, db, excludeTxId = null) {
   const activeRes = data.filter((row, i) => {
     if (i === 0) return false;
     if (row[2] === 'Cancelled') return false;
-    if (excludeTxId && row[12] === excludeTxId) return false;
+    if (excludeTxId && row[14] === excludeTxId) return false; // Column O (tx_id)
     return true;
   });
   

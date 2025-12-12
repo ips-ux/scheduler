@@ -6,6 +6,8 @@ const App = {
     calendar: null,
     items: [],
     reservations: [],
+    staff: [],
+    selectedStaff: null,
 
     init: async () => {
         console.log('App Initializing...');
@@ -13,6 +15,7 @@ const App = {
         // Initialize Calendar
         App.initCalendar();
         App.initTimePicker();
+        App.initStaffSelector();
 
         // Load Data
         await App.loadData();
@@ -39,36 +42,82 @@ const App = {
         App.calendar.render();
     },
 
-    loadData: async () => {
+    loadData: async (forceRefresh = false, manageSpinner = true) => {
         try {
+            // Show loading indicator only if not using cache (or forcing refresh)
+            const refreshBtn = document.getElementById('refresh-data-btn');
+
+            const handleResponse = async (response, type) => {
+                if (response.status === 'success') {
+                    // Update Data
+                    if (type === 'items') App.items = response.data;
+                    if (type === 'staff') {
+                        App.staff = response.data;
+                        App.renderStaffList();
+                    }
+                    if (type === 'reservations') {
+                        App.reservations = response.data.map(r => ({
+                            title: `${r.rented_to} - ${r.item}`,
+                            start: r.start_time,
+                            end: r.end_time,
+                            extendedProps: r,
+                            classNames: [r.status.toLowerCase()],
+                            backgroundColor: App.getStatusColor(r.status),
+                            borderColor: App.getStatusBorderColor(r.status),
+                            textColor: App.getStatusTextColor(r.status)
+                        }));
+
+                        // Update UI
+                        App.calendar.removeAllEvents();
+                        App.calendar.addEventSource(App.reservations);
+                        App.renderListView();
+                    }
+
+                    // Handle Background Revalidation
+                    if (response.revalidation) {
+                        console.log(`⏳ Background updating ${type}...`);
+                        if (refreshBtn) refreshBtn.classList.add('spinning');
+
+                        try {
+                            const freshResponse = await response.revalidation;
+                            if (freshResponse) {
+                                console.log(`✨ New data received for ${type}! Updating UI...`);
+                                await handleResponse(freshResponse, type);
+                                // Silent update - don't show alert (action-specific messages shown instead)
+                            } else {
+                                console.log(`✓ Background check complete: ${type} is up to date.`);
+                            }
+                        } catch (err) {
+                            console.warn(`Background update failed for ${type}`, err);
+                        } finally {
+                            if (refreshBtn) refreshBtn.classList.remove('spinning');
+                        }
+                    }
+                }
+            };
+
+            // Start loading
+            if (manageSpinner && forceRefresh && refreshBtn) refreshBtn.classList.add('spinning');
+
             // Fetch Items
-            const itemsResponse = await API.getItems();
-            if (itemsResponse.status === 'success') {
-                App.items = itemsResponse.data;
-            }
+            const itemsPromise = API.getItems({ forceRefresh }).then(res => handleResponse(res, 'items'));
+
+            // Fetch Staff
+            const staffPromise = API.getStaff({ forceRefresh }).then(res => handleResponse(res, 'staff'));
 
             // Fetch Reservations
-            const resResponse = await API.getReservations();
-            if (resResponse.status === 'success') {
-                App.reservations = resResponse.data.map(r => ({
-                    title: `${r.rented_to} - ${r.item}`,
-                    start: r.start_time,
-                    end: r.end_time,
-                    extendedProps: r,
-                    backgroundColor: App.getStatusColor(r.status),
-                    borderColor: App.getStatusColor(r.status)
-                }));
+            const resPromise = API.getReservations({ forceRefresh }).then(res => handleResponse(res, 'reservations'));
 
-                // Update Calendar
-                App.calendar.removeAllEvents();
-                App.calendar.addEventSource(App.reservations);
+            await Promise.all([itemsPromise, staffPromise, resPromise]);
 
-                // Update List View
-                App.renderListView();
-            }
         } catch (error) {
             console.error('Failed to load data:', error);
             App.showAlert('Failed to load data.', 'error');
+        } finally {
+            if (manageSpinner) {
+                const refreshBtn = document.getElementById('refresh-data-btn');
+                if (refreshBtn) refreshBtn.classList.remove('spinning');
+            }
         }
     },
 
@@ -97,24 +146,40 @@ const App = {
                 e.target.closest('.modal').classList.add('hidden');
             });
         });
-        
-        // Back to amenity selection
+
+        // Back to amenity selection (or close if editing)
         const backBtn = document.getElementById('back-to-amenity');
         if (backBtn) {
             backBtn.addEventListener('click', () => {
-                document.getElementById('reservation-modal').classList.add('hidden');
-                document.getElementById('type-selection-modal').classList.remove('hidden');
+                const isEditMode = document.getElementById('res-id').value !== '';
+                if (isEditMode) {
+                    document.getElementById('reservation-modal').classList.add('hidden');
+                } else {
+                    document.getElementById('reservation-modal').classList.add('hidden');
+                    document.getElementById('type-selection-modal').classList.remove('hidden');
+                }
             });
         }
 
         // Form
         document.getElementById('reservation-form').addEventListener('submit', App.handleFormSubmit);
 
+        // Cancel Reservation
+        document.getElementById('cancel-reservation-btn').addEventListener('click', App.handleCancellation);
+
+        // Restore Reservation
+        document.getElementById('restore-reservation-btn').addEventListener('click', App.handleRestore);
+
         // Date/Time Change (for price calc)
         document.getElementById('res-start-date').addEventListener('change', App.calculatePrice);
         document.getElementById('res-start-time').addEventListener('change', App.calculatePrice);
         document.getElementById('res-end-date').addEventListener('change', App.calculatePrice);
         document.getElementById('res-end-time').addEventListener('change', App.calculatePrice);
+
+        // Refresh Data
+        document.getElementById('refresh-data-btn').addEventListener('click', () => {
+            App.loadData(true); // Force refresh
+        });
 
         // Logout
         document.getElementById('logout-btn').addEventListener('click', Auth.logout);
@@ -186,10 +251,21 @@ const App = {
         const form = document.getElementById('reservation-form');
 
         form.reset();
+
+        // Reset all form controls to enabled state
+        const inputs = form.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => input.disabled = false);
+
         document.getElementById('res-id').value = '';
         document.getElementById('modal-title').textContent = 'New Reservation';
         document.getElementById('override-container').classList.add('hidden');
         document.getElementById('price-container').classList.add('hidden');
+
+        // Hide tracking info by default
+        document.getElementById('tracking-info').classList.add('hidden');
+
+        // Reset price label to default
+        document.getElementById('price-label').textContent = 'Cost';
 
         // Reset inputs
         const startDate = document.getElementById('res-start-date');
@@ -229,11 +305,83 @@ const App = {
 
             document.getElementById('res-notes').value = data.rental_notes || '';
 
-            App.calculatePrice();
+            // Display tracking information
+            if (data.scheduled_by) {
+                const trackingInfo = document.getElementById('tracking-info');
+                const scheduledBySpan = document.getElementById('tracking-scheduled-by');
+                const editedByContainer = document.getElementById('tracking-edit-container');
+                const editedBySpan = document.getElementById('tracking-edited-by');
+
+                trackingInfo.classList.remove('hidden');
+                scheduledBySpan.textContent = data.scheduled_by;
+
+                // Show edit info if available
+                if (data.edit_by && data.last_update) {
+                    editedByContainer.classList.remove('hidden');
+                    editedBySpan.textContent = `${data.edit_by} (${data.last_update})`;
+                } else {
+                    editedByContainer.classList.add('hidden');
+                }
+            }
+
+            // Handle price display
+            if (data.status === 'Cancelled') {
+                // Show cancellation fee from database
+                const priceLabel = document.getElementById('price-label');
+                const priceDisplay = document.getElementById('res-price');
+                priceLabel.textContent = 'Cancellation Fee';
+                priceDisplay.textContent = `$${parseFloat(data.total_cost || 0).toFixed(2)}`;
+            } else {
+                // Calculate regular price
+                const priceLabel = document.getElementById('price-label');
+                priceLabel.textContent = 'Cost';
+                App.calculatePrice();
+            }
         } else if (type) {
             // New Mode with Type
             document.getElementById('res-type').value = type;
             App.handleTypeLogic(type);
+        }
+
+        // Show/Hide Cancel Button & Handle Cancelled State
+        const cancelBtn = document.getElementById('cancel-reservation-btn');
+        const restoreBtn = document.getElementById('restore-reservation-btn');
+        const saveBtn = document.querySelector('#reservation-form button[type="submit"]');
+
+        if (data) {
+            cancelBtn.classList.remove('hidden');
+
+            if (data.status === 'Cancelled') {
+                // Read-Only Mode for Cancelled Reservations
+                document.getElementById('modal-title').textContent = 'Edit Cancelled Reservation';
+                inputs.forEach(input => input.disabled = true);
+                saveBtn.classList.add('hidden');
+
+                // Show price container for cancelled reservations (displays cancellation fee)
+                const priceContainer = document.getElementById('price-container');
+                priceContainer.classList.remove('hidden');
+
+                // Show Restore button and change Cancel button to Delete button
+                restoreBtn.classList.remove('hidden');
+                cancelBtn.textContent = 'Delete Reservation';
+                cancelBtn.dataset.action = 'delete';
+            } else {
+                // Normal Edit Mode
+                inputs.forEach(input => input.disabled = false);
+                saveBtn.classList.remove('hidden');
+                restoreBtn.classList.add('hidden');
+
+                // Reset Cancel button
+                cancelBtn.textContent = 'Cancel Reservation';
+                cancelBtn.dataset.action = 'cancel';
+            }
+        } else {
+            // New Reservation Mode
+            cancelBtn.classList.add('hidden');
+            restoreBtn.classList.add('hidden');
+            inputs.forEach(input => input.disabled = false);
+            saveBtn.classList.remove('hidden');
+            cancelBtn.dataset.action = 'cancel';
         }
 
         modal.classList.remove('hidden');
@@ -261,6 +409,7 @@ const App = {
         // Hide item selector for Guest Suite and Sky Lounge (space itself is the item)
         if (type === 'GUEST_SUITE' || type === 'SKY_LOUNGE') {
             itemSelectGroup.classList.add('hidden');
+            itemSelect.removeAttribute('required'); // Remove required since field is hidden
 
             // Auto-select the space name as the item
             const option = document.createElement('option');
@@ -304,7 +453,7 @@ const App = {
                 itemSearchClear.style.display = 'none';
                 itemSearch.removeEventListener('input', App.handleGearShedSearch);
                 itemSearch.addEventListener('input', App.handleGearShedSearch);
-                
+
                 // Bind clear button
                 itemSearchClear.removeEventListener('click', App.handleClearSearch);
                 itemSearchClear.addEventListener('click', App.handleClearSearch);
@@ -336,6 +485,12 @@ const App = {
 
         // Logic based on type
         if (type === 'GEAR_SHED') {
+            // Show and require end date/time fields
+            endDate.closest('.form-group').classList.remove('hidden');
+            endTime.closest('.form-group').classList.remove('hidden');
+            endDate.setAttribute('required', 'required');
+            endTime.setAttribute('required', 'required');
+
             // Hide times ONLY, keep Date visible
             startTime.style.display = 'none';
             endTime.style.display = 'none';
@@ -354,6 +509,13 @@ const App = {
 
         if (type === 'GUEST_SUITE') {
             priceContainer.classList.remove('hidden');
+
+            // Show and require end date/time fields
+            endDate.closest('.form-group').classList.remove('hidden');
+            endTime.closest('.form-group').classList.remove('hidden');
+            endDate.setAttribute('required', 'required');
+            endTime.setAttribute('required', 'required');
+
             // Enforce times visually
             startTime.value = '15:00';
             endTime.value = '11:00';
@@ -367,9 +529,18 @@ const App = {
             endDate.closest('.form-group').classList.add('hidden');
             endTime.closest('.form-group').classList.add('hidden');
 
+            // Remove required attribute from hidden fields
+            endDate.removeAttribute('required');
+            endTime.removeAttribute('required');
+
             // Default times
-            startTime.value = '16:00';
-            endTime.value = '20:00';
+            startTime.value = '10:00';
+            endTime.value = '14:00';
+
+            // Set end date to match start date if start date is already set
+            if (startDate.value) {
+                endDate.value = startDate.value;
+            }
 
             // Ensure editable
             startTime.readOnly = false;
@@ -401,6 +572,14 @@ const App = {
                     endDate.value = startDate.value;
                 }
             });
+
+            // Also sync end date when start date changes
+            const syncEndDate = () => {
+                if (startDate.value) {
+                    endDate.value = startDate.value;
+                }
+            };
+            startDate.addEventListener('change', syncEndDate);
         }
 
         App.calculatePrice();
@@ -491,12 +670,12 @@ const App = {
     handleGearShedSearch: () => {
         const query = document.getElementById('item-search').value;
         const clearBtn = document.getElementById('item-search-clear');
-        
+
         // Show/hide clear button
         if (clearBtn) {
             clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
         }
-        
+
         const filteredItems = App.filterGearShedItems(query, App.currentGearShedItems);
         App.renderGearShedDualPanel(filteredItems);
     },
@@ -554,7 +733,7 @@ const App = {
         if (!App.selectedGearShedItems.includes(itemId)) {
             App.selectedGearShedItems.push(itemId);
             App.selectedGearShedItems.sort((a, b) => a - b); // Sort numerically by ID
-            
+
             // Preserve search - reapply current filter
             const query = document.getElementById('item-search')?.value || '';
             if (query) {
@@ -570,7 +749,7 @@ const App = {
         const index = App.selectedGearShedItems.indexOf(itemId);
         if (index > -1) {
             App.selectedGearShedItems.splice(index, 1);
-            
+
             // Preserve search - reapply current filter
             const query = document.getElementById('item-search')?.value || '';
             if (query) {
@@ -585,15 +764,15 @@ const App = {
     handleClearSearch: () => {
         const itemSearch = document.getElementById('item-search');
         const clearBtn = document.getElementById('item-search-clear');
-        
+
         itemSearch.value = '';
         if (clearBtn) clearBtn.style.display = 'none';
-        
+
         // Re-render with full list
         App.renderGearShedDualPanel();
     },
 
-        handleFormSubmit: async (e) => {
+    handleFormSubmit: async (e) => {
         e.preventDefault();
         console.log('Form submit triggered');
 
@@ -615,7 +794,7 @@ const App = {
         }
 
         console.log('Selected items:', selectedItems);
-        
+
         if (selectedItems.length === 0) {
             console.log('No items selected - showing alert');
             App.showAlert('Please select at least one item.', 'error');
@@ -638,12 +817,23 @@ const App = {
             start_time: startDateTime,
             end_time: endDateTime,
             rental_notes: document.getElementById('res-notes').value,
-            override_lock: document.getElementById('res-override').checked
+            override_lock: document.getElementById('res-override').checked,
+            scheduled_by: App.selectedStaff ? (App.selectedStaff.name || App.selectedStaff.staff_name) : 'Staff'
         };
 
+        // Add edit tracking if this is an update
         const id = document.getElementById('res-id').value;
+        if (id) {
+            formData.edit_by = App.selectedStaff ? (App.selectedStaff.name || App.selectedStaff.staff_name) : 'Staff';
+            formData.last_update = App.formatTimestamp();
+        }
+
+        const refreshBtn = document.getElementById('refresh-data-btn');
 
         try {
+            // Start spinner
+            if (refreshBtn) refreshBtn.classList.add('spinning');
+
             let response;
             if (id) {
                 formData.tx_id = id;
@@ -654,14 +844,131 @@ const App = {
             }
 
             if (response.status === 'success') {
-                App.showAlert('Reservation saved!', 'success');
                 document.getElementById('reservation-modal').classList.add('hidden');
-                App.loadData();
+                await App.loadData(true, false); // Force refresh and wait, don't manage spinner
+                App.showAlert('Reservation saved!', 'success');
             } else {
                 App.showAlert(response.message || 'Error saving reservation', 'error');
             }
         } catch (error) {
             App.showAlert('An error occurred.', 'error');
+        } finally {
+            if (refreshBtn) refreshBtn.classList.remove('spinning');
+        }
+    },
+
+    handleCancellation: async () => {
+        const id = document.getElementById('res-id').value;
+        const type = document.getElementById('res-type').value;
+        const startDateStr = document.getElementById('res-start-date').value;
+        const startTimeStr = document.getElementById('res-start-time').value;
+        const cancelBtn = document.getElementById('cancel-reservation-btn');
+        const refreshBtn = document.getElementById('refresh-data-btn');
+
+        if (!id) return;
+
+        // Check if this is a DELETE action (from Cancelled state)
+        if (cancelBtn.dataset.action === 'delete') {
+            if (!confirm("Are you sure you want to permanently delete this cancelled reservation? This action cannot be undone.")) return;
+
+            try {
+                // Start spinner
+                if (refreshBtn) refreshBtn.classList.add('spinning');
+
+                const response = await API.deleteReservation(id);
+                if (response.status === 'success') {
+                    document.getElementById('reservation-modal').classList.add('hidden');
+                    await App.loadData(true, false); // Force refresh and wait, don't manage spinner
+                    App.showAlert('Reservation deleted successfully.', 'success');
+                } else {
+                    App.showAlert(response.message || 'Error deleting reservation', 'error');
+                }
+            } catch (error) {
+                console.error('Deletion failed:', error);
+                App.showAlert('Failed to delete reservation.', 'error');
+            } finally {
+                if (refreshBtn) refreshBtn.classList.remove('spinning');
+            }
+            return;
+        }
+
+        // Normal Cancellation Logic
+        // Calculate hours until start
+        const startDateTime = new Date(`${startDateStr}T${startTimeStr}`);
+        const now = new Date();
+        const diffMs = startDateTime - now;
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        let fee = 0;
+        let message = "Are you sure you want to cancel this reservation?";
+
+        // Fee Logic
+        if (diffHours < 72) {
+            if (type === 'SKY_LOUNGE') fee = 150;
+            if (type === 'GUEST_SUITE') fee = 75;
+        }
+
+        if (fee > 0) {
+            message = `Cancellation within 72 hours incurs a $${fee} fee. \n\nAre you sure you want to proceed? The reservation will be marked as Cancelled and the fee will be applied.`;
+        } else {
+            message += "\n\n(No cancellation fee applies)";
+        }
+
+        if (!confirm(message)) return;
+
+        try {
+            // Start spinner
+            if (refreshBtn) refreshBtn.classList.add('spinning');
+
+            let response;
+            if (fee > 0) {
+                // Soft Cancel (Fee applied)
+                response = await API.cancelReservation(id);
+            } else {
+                // Hard Delete (No fee)
+                response = await API.deleteReservation(id);
+            }
+
+            if (response.status === 'success') {
+                document.getElementById('reservation-modal').classList.add('hidden');
+                await App.loadData(true, false); // Force refresh and wait, don't manage spinner
+                App.showAlert(fee > 0 ? `Reservation cancelled. $${fee} fee applied.` : 'Reservation cancelled successfully.', 'success');
+            } else {
+                App.showAlert(response.message || 'Error cancelling reservation', 'error');
+            }
+        } catch (error) {
+            console.error('Cancellation failed:', error);
+            App.showAlert('Failed to cancel reservation.', 'error');
+        } finally {
+            if (refreshBtn) refreshBtn.classList.remove('spinning');
+        }
+    },
+
+    handleRestore: async () => {
+        const id = document.getElementById('res-id').value;
+        const refreshBtn = document.getElementById('refresh-data-btn');
+
+        if (!id) return;
+
+        if (!confirm("Are you sure you want to restore this cancelled reservation? It will be returned to 'Scheduled' status.")) return;
+
+        try {
+            // Start spinner
+            if (refreshBtn) refreshBtn.classList.add('spinning');
+
+            const response = await API.restoreReservation(id);
+            if (response.status === 'success') {
+                document.getElementById('reservation-modal').classList.add('hidden');
+                await App.loadData(true, false); // Force refresh and wait, don't manage spinner
+                App.showAlert('Reservation restored successfully.', 'success');
+            } else {
+                App.showAlert(response.message || 'Error restoring reservation', 'error');
+            }
+        } catch (error) {
+            console.error('Restore failed:', error);
+            App.showAlert('Failed to restore reservation.', 'error');
+        } finally {
+            if (refreshBtn) refreshBtn.classList.remove('spinning');
         }
     },
 
@@ -669,15 +976,46 @@ const App = {
         const tbody = document.querySelector('#reservations-table tbody');
         tbody.innerHTML = '';
 
+        // Helper function to format date as DD/MM/YY
+        const formatDate = (date) => {
+            const d = new Date(date);
+            const day = d.getDate().toString().padStart(2, '0');
+            const month = (d.getMonth() + 1).toString().padStart(2, '0');
+            const year = d.getFullYear().toString().slice(-2);
+            return `${day}/${month}/${year}`;
+        };
+
+        // Helper function to format time as 12-hour format (HH:MM AM/PM)
+        const formatTime = (date) => {
+            const d = new Date(date);
+            let hours = d.getHours();
+            const minutes = d.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // 0 should be 12
+            return `${hours}:${minutes} ${ampm}`;
+        };
+
         App.reservations.forEach(r => {
             const tr = document.createElement('tr');
+            if (r.extendedProps.status === 'Cancelled') {
+                tr.classList.add('cancelled');
+            }
+
+            const rentalNotes = r.extendedProps.rental_notes || '';
+            const returnNotes = r.extendedProps.return_notes || '';
+
             tr.innerHTML = `
-                <td>${r.extendedProps.tx_id}</td>
                 <td>${r.extendedProps.rented_to}</td>
                 <td>${r.extendedProps.item}</td>
-                <td>${new Date(r.start).toLocaleDateString()} ${new Date(r.start).toLocaleTimeString()}</td>
-                <td>${new Date(r.end).toLocaleDateString()} ${new Date(r.end).toLocaleTimeString()}</td>
+                <td>${formatDate(r.start)} ${formatTime(r.start)}</td>
+                <td>${formatDate(r.end)} ${formatTime(r.end)}</td>
+                <td>$${parseFloat(r.extendedProps.total_cost || 0).toFixed(2)}</td>
                 <td><span class="status-badge ${r.extendedProps.status.toLowerCase()}">${r.extendedProps.status}</span></td>
+                <td>${r.extendedProps.scheduled_by || ''}</td>
+                <td>${r.extendedProps.completed_by || ''}</td>
+                <td class="notes-cell">${rentalNotes}</td>
+                <td class="notes-cell">${returnNotes}</td>
                 <td>
                     <button class="icon-btn edit-btn" data-id="${r.extendedProps.tx_id}">Edit</button>
                 </td>
@@ -702,6 +1040,126 @@ const App = {
         alert.textContent = msg;
         container.appendChild(alert);
         setTimeout(() => alert.remove(), 3000);
+    },
+
+    // Format timestamp as mm/dd/yy hh:mm
+    formatTimestamp: (date = new Date()) => {
+        const d = typeof date === 'string' ? new Date(date) : date;
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        const day = d.getDate().toString().padStart(2, '0');
+        const year = d.getFullYear().toString().slice(-2);
+        let hours = d.getHours();
+        const minutes = d.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // 0 should be 12
+        return `${month}/${day}/${year} ${hours}:${minutes} ${ampm}`;
+    },
+
+    // --- Staff Selector Logic ---
+
+    initStaffSelector: () => {
+        // Load saved staff preference from localStorage
+        const savedStaff = localStorage.getItem('selectedStaff');
+        if (savedStaff) {
+            try {
+                App.selectedStaff = JSON.parse(savedStaff);
+                App.updateStaffDisplay();
+            } catch (e) {
+                console.error('Error loading saved staff:', e);
+            }
+        }
+
+        // Bind staff selector button click
+        document.getElementById('staff-selector-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            App.toggleStaffSelector();
+        });
+
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            const popover = document.getElementById('staff-selector-popover');
+            if (!popover.classList.contains('hidden') &&
+                !popover.contains(e.target) &&
+                !e.target.closest('#staff-selector-btn')) {
+                popover.classList.add('hidden');
+            }
+        });
+    },
+
+    toggleStaffSelector: () => {
+        const popover = document.getElementById('staff-selector-popover');
+        const button = document.getElementById('staff-selector-btn');
+
+        if (popover.classList.contains('hidden')) {
+            // Position popover below button
+            const rect = button.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+
+            popover.style.top = `${rect.bottom + scrollTop + 8}px`;
+            popover.style.left = `${rect.left + scrollLeft}px`;
+
+            popover.classList.remove('hidden');
+        } else {
+            popover.classList.add('hidden');
+        }
+    },
+
+    renderStaffList: () => {
+        const list = document.getElementById('staff-picker-list');
+        if (!list) return;
+
+        list.innerHTML = '';
+
+        if (App.staff.length === 0) {
+            list.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-muted);">No staff members found</div>';
+            return;
+        }
+
+        App.staff.forEach(staff => {
+            const item = document.createElement('div');
+            item.className = 'staff-picker-item';
+            item.textContent = staff.name || staff.staff_name || 'Unknown';
+
+            // Mark selected
+            if (App.selectedStaff && (staff.name === App.selectedStaff.name || staff.staff_name === App.selectedStaff.name)) {
+                item.classList.add('selected');
+            }
+
+            item.addEventListener('click', () => {
+                App.selectStaff(staff);
+            });
+
+            list.appendChild(item);
+        });
+    },
+
+    selectStaff: (staff) => {
+        App.selectedStaff = staff;
+
+        // Save to localStorage (no expiration)
+        localStorage.setItem('selectedStaff', JSON.stringify(staff));
+
+        // Update display
+        App.updateStaffDisplay();
+
+        // Re-render list to update selection
+        App.renderStaffList();
+
+        // Close popover
+        document.getElementById('staff-selector-popover').classList.add('hidden');
+
+        App.showAlert(`Switched to ${staff.name || staff.staff_name}`, 'success');
+    },
+
+    updateStaffDisplay: () => {
+        const displayElement = document.getElementById('selected-staff-name');
+        if (App.selectedStaff) {
+            displayElement.textContent = App.selectedStaff.name || App.selectedStaff.staff_name || 'Select Staff';
+        } else {
+            displayElement.textContent = 'Select Staff';
+        }
     },
 
     getStatusColor: (status) => {
@@ -926,7 +1384,7 @@ const App = {
             popover.classList.remove('hidden');
 
             // Initialize scroll positions based on current value or default
-            App.setInitialPickerValue(input.value || '16:00');
+            App.setInitialPickerValue(input.value || '10:00');
         },
 
     setInitialPickerValue: (timeStr) => {
@@ -1012,6 +1470,29 @@ const App = {
     },
 
     // ... (rest of App object)
+    getStatusColor: (status) => {
+        switch (status) {
+            case 'Scheduled': return '#1a237e'; // Primary
+            case 'Active': return '#10b981'; // Success
+            case 'Completed': return '#6b7280'; // Muted
+            case 'Cancelled': return '#e5e7eb'; // Light Grey (Background)
+            default: return '#1a237e';
+        }
+    },
+
+    getStatusBorderColor: (status) => {
+        switch (status) {
+            case 'Cancelled': return '#d1d5db'; // Slightly darker grey for border
+            default: return App.getStatusColor(status);
+        }
+    },
+
+    getStatusTextColor: (status) => {
+        switch (status) {
+            case 'Cancelled': return '#9ca3af'; // Grey text
+            default: return '#ffffff'; // White text
+        }
+    },
 };
 
 // Expose to window

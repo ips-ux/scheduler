@@ -14,10 +14,12 @@ const Auth = {
     user: null,
 
     init: () => {
-        // Check for existing session
+        // Check for existing session (no expiration)
         const storedUser = localStorage.getItem('user_email');
         if (storedUser) {
-            Auth.validateUser(storedUser);
+            // Trust localStorage - user stays logged in indefinitely
+            Auth.user = storedUser;
+            Auth.onLoginSuccess();
         }
     },
 
@@ -44,6 +46,7 @@ const Auth = {
 
         if (email === ALLOWED_EMAIL) {
             Auth.user = email;
+            // Store in localStorage permanently (no expiration)
             localStorage.setItem('user_email', email);
             Auth.onLoginSuccess();
         } else {
@@ -55,7 +58,6 @@ const Auth = {
     onLoginSuccess: () => {
         document.getElementById('login-overlay').classList.remove('active');
         document.getElementById('app-container').classList.remove('hidden');
-        document.getElementById('user-email').textContent = Auth.user;
 
         // Initialize App
         if (window.App) {

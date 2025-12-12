@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -49,9 +49,23 @@
                 </nav>
             </div>
             <div class="header-right">
+                <button id="refresh-data-btn" class="icon-btn" title="Refresh Data">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                </button>
                 <button id="new-reservation-btn" class="primary-btn">+ New Reservation</button>
                 <div class="user-profile">
-                    <span id="user-email"></span>
+                    <button id="staff-selector-btn" class="staff-selector-btn" title="Select Staff Member">
+                        <span id="selected-staff-name">Select Staff</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
                     <button id="logout-btn" class="icon-btn" title="Logout">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -89,12 +103,16 @@
                     <table id="reservations-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
                                 <th>Unit</th>
                                 <th>Item</th>
                                 <th>Start</th>
                                 <th>End</th>
+                                <th>Price</th>
                                 <th>Status</th>
+                                <th>Scheduled By</th>
+                                <th>Completed By</th>
+                                <th>Rental Notes</th>
+                                <th>Return Notes</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -208,7 +226,7 @@
                     </div>
 
                     <div class="form-group hidden" id="price-container">
-                        <label>Cost</label>
+                        <label id="price-label">Cost</label>
                         <div id="res-price" class="price-display">$0.00</div>
                     </div>
 
@@ -224,8 +242,24 @@
                         <textarea id="res-notes" rows="3"></textarea>
                     </div>
 
+                    <!-- Tracking Information -->
+                    <div id="tracking-info" class="tracking-info hidden">
+                        <div class="tracking-item">
+                            <span class="tracking-label">Scheduled By:</span>
+                            <span id="tracking-scheduled-by"></span>
+                        </div>
+                        <div class="tracking-item hidden" id="tracking-edit-container">
+                            <span class="tracking-label">Edited By:</span>
+                            <span id="tracking-edited-by"></span>
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="button" class="secondary-btn" id="back-to-amenity"> Back</button>
+                        <button type="button" class="danger-btn hidden" id="cancel-reservation-btn"
+                            style="margin-right: auto;">Cancel Reservation</button>
+                        <button type="button" class="primary-btn hidden" id="restore-reservation-btn"
+                            style="margin-right: auto;">Restore Reservation</button>
                         <button type="submit" class="primary-btn">Save Reservation</button>
                     </div>
                 </form>
@@ -256,8 +290,19 @@
         </div>
     </div>
 
+    <!-- Staff Selector Popover -->
+    <div id="staff-selector-popover" class="popover hidden">
+        <div class="popover-content staff-popover-content">
+            <div class="staff-picker-header">Select Staff Member</div>
+            <div class="staff-picker-list" id="staff-picker-list">
+                <!-- Staff members injected by JS -->
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="js/cache.js"></script>
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/app.js"></script>
