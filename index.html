@@ -115,7 +115,7 @@
         <div class="modal-content type-selection-content">
             <div class="modal-header">
                 <h2>Select Reservation Type</h2>
-                <button class="close-modal">&times;</button>
+                <button class="close-modal" type="button">&times;</button>
             </div>
             <div class="modal-body type-grid">
                 <button class="type-card" data-type="GUEST_SUITE">
@@ -142,7 +142,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modal-title">New Reservation</h2>
-                <button class="close-modal">&times;</button>
+                <button class="close-modal" type="button">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="reservation-form">
@@ -159,10 +159,28 @@
                         <label for="res-item">Item(s)</label>
 
                         <!-- Search Bar (only for Gear Shed) -->
-                        <input type="text" id="item-search" class="item-search"
-                            placeholder="Search... (* wildcard, - exclude, &quot;exact&quot;)" style="display:none;">
+                        <div class="search-wrapper" style="display:none;" id="item-search-wrapper">
+                            <input type="text" id="item-search" class="item-search" placeholder="Search...">
+                            <button type="button" class="search-clear" id="item-search-clear"
+                                style="display:none;">&times;</button>
+                        </div>
 
-                        <!-- Checkbox List Container (only for Gear Shed) -->                        <!-- Dual Panel Container (only for Gear Shed) -->                        <div id="item-dual-panel" class="item-dual-panel" style="display:none;">                            <!-- Available Items (Left) -->                            <div class="item-panel">                                <div class="panel-header">Available Items</div>                                <div id="item-available-list" class="item-list">                                    <!-- Available items injected by JS -->                                </div>                            </div>                                                        <!-- Selected Items (Right) -->                            <div class="item-panel">                                <div class="panel-header">Selected Items</div>                                <div id="item-selected-list" class="item-list">                                    <!-- Selected items injected by JS -->                                </div>                            </div>                        </div>
+
+                        <!-- Checkbox List Container (only for Gear Shed) -->
+                        <!-- Dual Panel Container (only for Gear Shed) -->
+                        <div id="item-dual-panel" class="item-dual-panel" style="display:none;">
+                            <!-- Available Items (Left) -->
+                            <div class="item-panel">
+                                <div class="panel-header">Available Items</div>
+                                <div id="item-available-list" class="item-list"> <!-- Available items injected by JS -->
+                                </div>
+                            </div> <!-- Selected Items (Right) -->
+                            <div class="item-panel">
+                                <div class="panel-header">Selected Items</div>
+                                <div id="item-selected-list" class="item-list"> <!-- Selected items injected by JS -->
+                                </div>
+                            </div>
+                        </div>
 
                         <!-- Original select (hidden for Gear Shed, used for Guest Suite/Sky Lounge) -->
                         <select id="res-item" required multiple class="multi-select">
@@ -190,7 +208,7 @@
                     </div>
 
                     <div class="form-group hidden" id="price-container">
-                        <label>Estimated Cost</label>
+                        <label>Cost</label>
                         <div id="res-price" class="price-display">$0.00</div>
                     </div>
 
@@ -207,7 +225,7 @@
                     </div>
 
                     <div class="form-actions">
-                        <button type="button" class="secondary-btn close-modal">Cancel</button>
+                        <button type="button" class="secondary-btn" id="back-to-amenity"> Back</button>
                         <button type="submit" class="primary-btn">Save Reservation</button>
                     </div>
                 </form>

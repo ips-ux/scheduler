@@ -788,3 +788,89 @@ input[readonly] {
     font-style: italic;
     font-size: 0.875rem;
 }
+/* Search Wrapper with Clear Button */
+.search-wrapper {
+    position: relative;
+    margin-bottom: var(--spacing-sm);
+}
+
+.search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+
+.search-clear:hover {
+    color: var(--text-main);
+}
+
+.item-search {
+    padding-right: 32px;
+    /* Make room for X button */
+}
+/* Modal Close Button (X) in header */
+.close-modal {
+    position: absolute;
+    right: var(--spacing-md);
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+
+.close-modal:hover {
+    color: var(--text-main);
+}
+
+/* Back button styling */
+#back-to-amenity {
+    padding-left: var(--spacing-lg);
+}
+
+#back-to-amenity::before {
+    margin-right: var(--spacing-xs);
+}
+.modal-header { position: relative; border-bottom: 1px solid var(--border-color); padding: var(--spacing-lg); } .modal-header h2 { margin: 0; font-size: 1.5rem; color: var(--text-main); }
+
+/* Modal Header */
+.modal-header { position: relative; border-bottom: 1px solid var(--border-color); padding: var(--spacing-lg); }
+.modal-header h2 { margin: 0; font-size: 1.5rem; color: var(--text-main); }
+
+
+/* Modal Header */
+.modal-header {
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
+    padding: var(--spacing-lg);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--text-main);
+}

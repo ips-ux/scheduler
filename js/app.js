@@ -97,6 +97,15 @@ const App = {
                 e.target.closest('.modal').classList.add('hidden');
             });
         });
+        
+        // Back to amenity selection
+        const backBtn = document.getElementById('back-to-amenity');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                document.getElementById('reservation-modal').classList.add('hidden');
+                document.getElementById('type-selection-modal').classList.remove('hidden');
+            });
+        }
 
         // Form
         document.getElementById('reservation-form').addEventListener('submit', App.handleFormSubmit);
@@ -265,14 +274,17 @@ const App = {
 
             // Get UI elements
             const itemSearch = document.getElementById('item-search');
+            const itemSearchWrapper = document.getElementById('item-search-wrapper');
+            const itemSearchClear = document.getElementById('item-search-clear');
             const itemDualPanel = document.getElementById('item-dual-panel');
             const itemHint = document.getElementById('item-hint');
 
             // For Gear Shed: show checkbox UI, hide select
             if (type === 'GEAR_SHED') {
                 itemSelect.style.display = 'none';
+                itemSelect.removeAttribute('required');
                 itemHint.style.display = 'none';
-                itemSearch.style.display = 'block';
+                itemSearchWrapper.style.display = 'block';
                 itemDualPanel.style.display = 'flex';
 
                 // Filter items (Case-insensitive)
@@ -281,21 +293,27 @@ const App = {
                 // Store for search filtering
                 App.currentGearShedItems = filteredItems;
 
-                // Initialize selected items
+                // Initialize selected items (store IDs, not names)
                 App.selectedGearShedItems = [];
-                
+
                 // Render dual-panel
                 App.renderGearShedDualPanel();
 
                 // Bind search
                 itemSearch.value = '';
-                itemSearch.removeEventListener('input', App.handleGearShedSearch); // Remove old
+                itemSearchClear.style.display = 'none';
+                itemSearch.removeEventListener('input', App.handleGearShedSearch);
                 itemSearch.addEventListener('input', App.handleGearShedSearch);
+                
+                // Bind clear button
+                itemSearchClear.removeEventListener('click', App.handleClearSearch);
+                itemSearchClear.addEventListener('click', App.handleClearSearch);
             } else {
-                // Other types: use select element
+                // Other types: use select element, add required back
                 itemSelect.style.display = 'block';
+                itemSelect.setAttribute('required', 'required');
                 itemHint.style.display = 'block';
-                itemSearch.style.display = 'none';
+                itemSearchWrapper.style.display = 'none';
                 itemDualPanel.style.display = 'none';
 
                 // Filter items (Case-insensitive)
@@ -424,15 +442,17 @@ const App = {
     },
     // --- Gear Shed Checkbox Functions ---
 
-    renderGearShedDualPanel: () => {
+    renderGearShedDualPanel: (filteredAvailable = null) => {
         const availableList = document.getElementById('item-available-list');
         const selectedList = document.getElementById('item-selected-list');
-        
+
         // Get available items (not selected)
-        const availableItems = App.currentGearShedItems.filter(item => 
-            !App.selectedGearShedItems.includes(item.item)
+        // Use filtered list if provided (from search), otherwise use all items
+        const sourceItems = filteredAvailable !== null ? filteredAvailable : App.currentGearShedItems;
+        const availableItems = sourceItems.filter(item =>
+            !App.selectedGearShedItems.includes(item.item_id)
         );
-        
+
         // Render available items
         availableList.innerHTML = '';
         if (availableItems.length === 0) {
@@ -442,23 +462,27 @@ const App = {
                 const div = document.createElement('div');
                 div.className = 'item-list-item';
                 div.textContent = item.item;
-                div.dataset.itemName = item.item;
-                div.addEventListener('click', () => App.moveToSelected(item.item));
+                div.dataset.itemId = item.item_id;
+                div.addEventListener('click', () => App.moveToSelected(item.item_id));
                 availableList.appendChild(div);
             });
         }
-        
+
         // Render selected items
         selectedList.innerHTML = '';
         if (App.selectedGearShedItems.length === 0) {
             selectedList.innerHTML = '<div class="item-list-empty">No items selected</div>';
         } else {
-            App.selectedGearShedItems.forEach(itemName => {
+            App.selectedGearShedItems.forEach(itemId => {
+                // Find the item object from current items
+                const itemObj = App.currentGearShedItems.find(i => i.item_id === itemId);
+                if (!itemObj) return; // Skip if not found
+
                 const div = document.createElement('div');
                 div.className = 'item-list-item';
-                div.textContent = itemName;
-                div.dataset.itemName = itemName;
-                div.addEventListener('click', () => App.moveToAvailable(itemName));
+                div.textContent = itemObj.item;
+                div.dataset.itemId = itemId;
+                div.addEventListener('click', () => App.moveToAvailable(itemId));
                 selectedList.appendChild(div);
             });
         }
@@ -466,8 +490,15 @@ const App = {
 
     handleGearShedSearch: () => {
         const query = document.getElementById('item-search').value;
+        const clearBtn = document.getElementById('item-search-clear');
+        
+        // Show/hide clear button
+        if (clearBtn) {
+            clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
+        }
+        
         const filteredItems = App.filterGearShedItems(query, App.currentGearShedItems);
-        App.renderGearShedDualPanel();
+        App.renderGearShedDualPanel(filteredItems);
     },
 
     filterGearShedItems: (query, items) => {
@@ -519,24 +550,52 @@ const App = {
         });
     },
 
-    moveToSelected: (itemName) => {
-        if (!App.selectedGearShedItems.includes(itemName)) {
-            App.selectedGearShedItems.push(itemName);
-            App.selectedGearShedItems.sort();
-            App.renderGearShedDualPanel();
-        }
-    },
-    
-    moveToAvailable: (itemName) => {
-        const index = App.selectedGearShedItems.indexOf(itemName);
-        if (index > -1) {
-            App.selectedGearShedItems.splice(index, 1);
-            App.renderGearShedDualPanel();
+    moveToSelected: (itemId) => {
+        if (!App.selectedGearShedItems.includes(itemId)) {
+            App.selectedGearShedItems.push(itemId);
+            App.selectedGearShedItems.sort((a, b) => a - b); // Sort numerically by ID
+            
+            // Preserve search - reapply current filter
+            const query = document.getElementById('item-search')?.value || '';
+            if (query) {
+                const filteredItems = App.filterGearShedItems(query, App.currentGearShedItems);
+                App.renderGearShedDualPanel(filteredItems);
+            } else {
+                App.renderGearShedDualPanel();
+            }
         }
     },
 
-    handleFormSubmit: async (e) => {
+    moveToAvailable: (itemId) => {
+        const index = App.selectedGearShedItems.indexOf(itemId);
+        if (index > -1) {
+            App.selectedGearShedItems.splice(index, 1);
+            
+            // Preserve search - reapply current filter
+            const query = document.getElementById('item-search')?.value || '';
+            if (query) {
+                const filteredItems = App.filterGearShedItems(query, App.currentGearShedItems);
+                App.renderGearShedDualPanel(filteredItems);
+            } else {
+                App.renderGearShedDualPanel();
+            }
+        }
+    },
+
+    handleClearSearch: () => {
+        const itemSearch = document.getElementById('item-search');
+        const clearBtn = document.getElementById('item-search-clear');
+        
+        itemSearch.value = '';
+        if (clearBtn) clearBtn.style.display = 'none';
+        
+        // Re-render with full list
+        App.renderGearShedDualPanel();
+    },
+
+        handleFormSubmit: async (e) => {
         e.preventDefault();
+        console.log('Form submit triggered');
 
         const type = document.getElementById('res-type').value;
         const itemSelect = document.getElementById('res-item');
@@ -544,14 +603,21 @@ const App = {
         // Handle Multi-select - different logic for Gear Shed vs others
         let selectedItems;
         if (type === 'GEAR_SHED') {
-            // Get selected items from right panel
-            selectedItems = App.selectedGearShedItems || [];
+            // Get selected items from right panel (IDs) and convert to item names
+            const selectedIds = App.selectedGearShedItems || [];
+            selectedItems = selectedIds.map(id => {
+                const item = App.currentGearShedItems.find(i => i.item_id === id);
+                return item ? item.item : null;
+            }).filter(name => name !== null);
         } else {
             // Get from select element (Guest Suite/Sky Lounge)
             selectedItems = Array.from(itemSelect.selectedOptions).map(opt => opt.value);
         }
 
+        console.log('Selected items:', selectedItems);
+        
         if (selectedItems.length === 0) {
+            console.log('No items selected - showing alert');
             App.showAlert('Please select at least one item.', 'error');
             return;
         }

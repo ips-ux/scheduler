@@ -1,0 +1,33 @@
+/* Modal Close Button (X) in header */
+.close-modal {
+    position: absolute;
+    right: var(--spacing-md);
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+
+.close-modal:hover {
+    color: var(--text-main);
+}
+
+/* Back button styling */
+#back-to-amenity {
+    padding-left: var(--spacing-lg);
+}
+
+#back-to-amenity::before {
+    margin-right: var(--spacing-xs);
+}
