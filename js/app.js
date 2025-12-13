@@ -1318,7 +1318,7 @@ const App = {
             const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
             popover.style.top = `${rect.bottom + scrollTop + 8}px`;
-            popover.style.left = `${rect.left + scrollLeft}px`;
+            popover.style.left = `${rect.left + scrollLeft - 85}px`;
 
             popover.classList.remove('hidden');
         } else {
