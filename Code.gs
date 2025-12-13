@@ -54,6 +54,9 @@ function handleRequest(e) {
       case 'restoreReservation':
         result = restoreReservation(params.tx_id);
         break;
+      case 'completeReservation':
+        result = completeReservation(params.tx_id, params.return_notes, params.completed_by);
+        break;
       default:
         result = { status: 'error', message: 'Invalid action' };
     }
@@ -360,6 +363,32 @@ function restoreReservation(tx_id) {
   return { status: 'success', message: `Restored ${rowsToRestore.length} row(s)` };
 }
 
+function completeReservation(tx_id, return_notes, completed_by) {
+  const db = getDb();
+  const sheet = db.getSheetByName('reservations');
+  const data = sheet.getDataRange().getValues();
+
+  // Find ALL rows with this tx_id
+  const rowsToComplete = [];
+  data.forEach((row, i) => {
+    if (i === 0) return; // Skip header row
+    if (row[14] === tx_id) rowsToComplete.push(i + 1); // Column O (tx_id), 1-based row index
+  });
+
+  if (rowsToComplete.length === 0) {
+    return { status: 'error', message: 'Reservation not found' };
+  }
+
+  // Update all rows with this tx_id
+  rowsToComplete.forEach(rowIndex => {
+    sheet.getRange(rowIndex, 3).setValue('Complete'); // Column C (status)
+    sheet.getRange(rowIndex, 8).setValue(completed_by || 'Staff'); // Column H (completed_by)
+    sheet.getRange(rowIndex, 10).setValue(return_notes || ''); // Column J (return_notes)
+  });
+
+  return { status: 'success', message: `Completed ${rowsToComplete.length} row(s)` };
+}
+
 function validateReservation(res, db, excludeTxId = null) {
   const start = new Date(res.start_time);
   const end = new Date(res.end_time);
@@ -372,6 +401,7 @@ function validateReservation(res, db, excludeTxId = null) {
   const activeRes = data.filter((row, i) => {
     if (i === 0) return false;
     if (row[2] === 'Cancelled') return false;
+    if (row[2] === 'Complete') return false;
     if (excludeTxId && row[14] === excludeTxId) return false; // Column O (tx_id)
     return true;
   });

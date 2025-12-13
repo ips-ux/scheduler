@@ -242,6 +242,50 @@ button {
     transition: all var(--transition-fast);
 }
 
+/* Notifications Button */
+.notifications-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-main);
+    transition: all var(--transition-fast);
+    margin-left: var(--spacing-md);
+}
+
+.notifications-btn:hover {
+    background: var(--card-bg);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.notifications-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: var(--error);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 2px var(--card-bg);
+}
+
+.notifications-badge.hidden {
+    display: none;
+}
+
 .staff-selector-btn:hover {
     background: white;
     border-color: var(--primary-color);
@@ -762,6 +806,54 @@ tr.cancelled:hover {
     transform: translateY(-1px);
 }
 
+.success-btn {
+    background-color: var(--success);
+    color: white;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+}
+
+.success-btn:hover:not(:disabled) {
+    background-color: #059669;
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.success-btn:disabled {
+    background-color: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Completion Summary */
+.completion-summary {
+    background: var(--bg-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    border: 1px solid var(--border-color);
+}
+
+.summary-item {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) 0;
+    font-size: 0.875rem;
+}
+
+.summary-label {
+    font-weight: 600;
+    color: var(--text-muted);
+    min-width: 80px;
+}
+
+.summary-item span:not(.summary-label) {
+    color: var(--text-main);
+}
+
 .picker-column::-webkit-scrollbar {
     display: none;
 }
@@ -873,6 +965,86 @@ tr.cancelled:hover {
 
 .staff-picker-item.selected:hover {
     background: var(--primary-dark);
+}
+
+/* Notifications Popover */
+.notifications-popover-content {
+    width: 360px;
+    max-height: 500px;
+    overflow: hidden;
+}
+
+.notifications-header {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-main);
+    padding-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.notifications-list {
+    max-height: 420px;
+    overflow-y: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.notifications-list::-webkit-scrollbar {
+    display: none;
+}
+
+.notification-item {
+    padding: var(--spacing-md);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    margin-bottom: var(--spacing-sm);
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+}
+
+.notification-item:hover {
+    background: var(--card-bg);
+    border-color: var(--primary-color);
+    transform: translateX(2px);
+}
+
+.notification-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xs);
+}
+
+.notification-item-unit {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.875rem;
+}
+
+.notification-item-overdue {
+    font-size: 0.75rem;
+    color: var(--error);
+    font-weight: 500;
+}
+
+.notification-item-item {
+    font-size: 0.875rem;
+    color: var(--text-main);
+    margin-bottom: var(--spacing-xs);
+}
+
+.notification-item-period {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.notifications-empty {
+    padding: var(--spacing-xl);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.875rem;
 }
 
 .picker-column-readonly {

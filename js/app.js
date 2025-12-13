@@ -16,6 +16,7 @@ const App = {
         App.initCalendar();
         App.initTimePicker();
         App.initStaffSelector();
+        App.initNotifications();
 
         // Load Data
         await App.loadData();
@@ -36,6 +37,12 @@ const App = {
             events: App.reservations,
             eventClick: (info) => {
                 App.openReservationModal(info.event.extendedProps);
+            },
+            dateClick: (info) => {
+                // Store the clicked date for use in reservation creation
+                App.clickedDate = info.dateStr;
+                // Open type selection modal
+                document.getElementById('type-selection-modal').classList.remove('hidden');
             },
             height: '100%'
         });
@@ -71,6 +78,7 @@ const App = {
                         App.calendar.removeAllEvents();
                         App.calendar.addEventSource(App.reservations);
                         App.renderListView();
+                        App.updateNotifications();
                     }
 
                     // Handle Background Revalidation
@@ -170,10 +178,23 @@ const App = {
         // Restore Reservation
         document.getElementById('restore-reservation-btn').addEventListener('click', App.handleRestore);
 
-        // Date/Time Change (for price calc)
+        // Complete Reservation
+        document.getElementById('complete-reservation-btn').addEventListener('click', App.handleCompleteClick);
+
+        // Complete Reservation Form
+        document.getElementById('complete-reservation-form').addEventListener('submit', App.handleCompleteSubmit);
+
+        // Date/Time Change (for price calc and complete button state)
         document.getElementById('res-start-date').addEventListener('change', App.calculatePrice);
         document.getElementById('res-start-time').addEventListener('change', App.calculatePrice);
-        document.getElementById('res-end-date').addEventListener('change', App.calculatePrice);
+        document.getElementById('res-end-date').addEventListener('change', () => {
+            App.calculatePrice();
+            // Update complete button state when end date changes
+            const resId = document.getElementById('res-id').value;
+            if (resId) {
+                App.updateCompleteButtonState();
+            }
+        });
         document.getElementById('res-end-time').addEventListener('change', App.calculatePrice);
 
         // Refresh Data
@@ -282,6 +303,13 @@ const App = {
         startDate.closest('.form-group').classList.remove('hidden');
         endDate.closest('.form-group').classList.remove('hidden');
 
+        // If there's a clicked date from the calendar, pre-populate the start date
+        if (!data && App.clickedDate) {
+            startDate.value = App.clickedDate;
+            // Clear the clicked date after using it
+            App.clickedDate = null;
+        }
+
         if (data) {
             // Edit Mode
             document.getElementById('modal-title').textContent = 'Edit Reservation';
@@ -292,7 +320,28 @@ const App = {
             // Set Type logic
             App.handleTypeLogic(data.resource_type);
 
-            document.getElementById('res-item').value = data.item;
+            // For Gear Shed, we need to populate all items with the same tx_id
+            if (data.resource_type === 'GEAR_SHED') {
+                // Find all reservations with the same tx_id to get all items
+                const allItemsForReservation = App.reservations
+                    .filter(r => r.extendedProps.tx_id === data.tx_id)
+                    .map(r => r.extendedProps.item);
+
+                // Find the item_id for each item name and add to selectedGearShedItems
+                App.selectedGearShedItems = [];
+                allItemsForReservation.forEach(itemName => {
+                    const itemObj = App.currentGearShedItems.find(i => i.item === itemName);
+                    if (itemObj) {
+                        App.selectedGearShedItems.push(itemObj.item_id);
+                    }
+                });
+
+                // Re-render the dual panel to show the selected items
+                App.renderGearShedDualPanel();
+            } else {
+                // For other types, set the item normally
+                document.getElementById('res-item').value = data.item;
+            }
 
             // Split Date/Time
             const start = new Date(data.start_time);
@@ -341,11 +390,40 @@ const App = {
             // New Mode with Type
             document.getElementById('res-type').value = type;
             App.handleTypeLogic(type);
+
+            // Set intelligent defaults based on type and start date
+            if (startDate.value) {
+                const clickedDateObj = new Date(startDate.value + 'T00:00:00');
+
+                if (type === 'GUEST_SUITE') {
+                    // Set start to clicked date at 3pm
+                    startTime.value = '15:00';
+
+                    // Set end to 2 days later at 11am (minimum stay)
+                    const endDateObj = new Date(clickedDateObj);
+                    endDateObj.setDate(endDateObj.getDate() + 2);
+                    endDate.value = endDateObj.toISOString().split('T')[0];
+                    endTime.value = '11:00';
+                } else if (type === 'SKY_LOUNGE') {
+                    // Default to 4pm start, 8pm end (4 hours)
+                    startTime.value = '16:00';
+                    endTime.value = '20:00';
+                    endDate.value = startDate.value; // Same day
+                } else if (type === 'GEAR_SHED') {
+                    // Set to same day
+                    endDate.value = startDate.value;
+                    // Times are already set to 10:00 and 18:00 by handleTypeLogic
+                }
+
+                // Recalculate price with new dates
+                App.calculatePrice();
+            }
         }
 
         // Show/Hide Cancel Button & Handle Cancelled State
         const cancelBtn = document.getElementById('cancel-reservation-btn');
         const restoreBtn = document.getElementById('restore-reservation-btn');
+        const completeBtn = document.getElementById('complete-reservation-btn');
         const saveBtn = document.querySelector('#reservation-form button[type="submit"]');
 
         if (data) {
@@ -356,6 +434,7 @@ const App = {
                 document.getElementById('modal-title').textContent = 'Edit Cancelled Reservation';
                 inputs.forEach(input => input.disabled = true);
                 saveBtn.classList.add('hidden');
+                completeBtn.classList.add('hidden');
 
                 // Show price container for cancelled reservations (displays cancellation fee)
                 const priceContainer = document.getElementById('price-container');
@@ -365,20 +444,33 @@ const App = {
                 restoreBtn.classList.remove('hidden');
                 cancelBtn.textContent = 'Delete Reservation';
                 cancelBtn.dataset.action = 'delete';
+            } else if (data.status === 'Complete') {
+                // Read-Only Mode for Completed Reservations
+                document.getElementById('modal-title').textContent = 'View Completed Reservation';
+                inputs.forEach(input => input.disabled = true);
+                saveBtn.classList.add('hidden');
+                cancelBtn.classList.add('hidden');
+                restoreBtn.classList.add('hidden');
+                completeBtn.classList.add('hidden');
             } else {
-                // Normal Edit Mode
+                // Normal Edit Mode (Scheduled status)
                 inputs.forEach(input => input.disabled = false);
                 saveBtn.classList.remove('hidden');
                 restoreBtn.classList.add('hidden');
+                completeBtn.classList.remove('hidden');
 
                 // Reset Cancel button
                 cancelBtn.textContent = 'Cancel Reservation';
                 cancelBtn.dataset.action = 'cancel';
+
+                // Check if complete button should be enabled
+                App.updateCompleteButtonState(data);
             }
         } else {
             // New Reservation Mode
             cancelBtn.classList.add('hidden');
             restoreBtn.classList.add('hidden');
+            completeBtn.classList.add('hidden');
             inputs.forEach(input => input.disabled = false);
             saveBtn.classList.remove('hidden');
             cancelBtn.dataset.action = 'cancel';
@@ -972,6 +1064,134 @@ const App = {
         }
     },
 
+    updateCompleteButtonState: (data) => {
+        const completeBtn = document.getElementById('complete-reservation-btn');
+        const endDateStr = document.getElementById('res-end-date').value;
+
+        if (!endDateStr) {
+            completeBtn.disabled = true;
+            return;
+        }
+
+        // Get today's date (midnight for comparison)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Get end date (midnight for comparison)
+        const endDate = new Date(endDateStr);
+        endDate.setHours(0, 0, 0, 0);
+
+        // Enable button if today is on or after the end date
+        if (today >= endDate) {
+            completeBtn.disabled = false;
+        } else {
+            completeBtn.disabled = true;
+        }
+    },
+
+    handleCompleteClick: () => {
+        const completeBtn = document.getElementById('complete-reservation-btn');
+
+        // If button is disabled, show prompt to adjust end date
+        if (completeBtn.disabled) {
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+
+            if (confirm('This reservation cannot be completed yet. Would you like to adjust the end date to today to enable completion?')) {
+                const endDateInput = document.getElementById('res-end-date');
+                endDateInput.value = todayStr;
+
+                // Get the current reservation data
+                const currentData = {
+                    end_time: document.getElementById('res-end-date').value + 'T' + document.getElementById('res-end-time').value
+                };
+
+                // Re-check button state
+                App.updateCompleteButtonState(currentData);
+
+                App.showAlert('End date updated to today. You can now complete the reservation.', 'success');
+            }
+            return;
+        }
+
+        // Button is enabled - open completion modal
+        App.openCompleteModal();
+    },
+
+    openCompleteModal: () => {
+        const txId = document.getElementById('res-id').value;
+        const unit = document.getElementById('res-unit').value;
+        const item = document.getElementById('res-item').value;
+        const startDate = document.getElementById('res-start-date').value;
+        const startTime = document.getElementById('res-start-time').value;
+        const endDate = document.getElementById('res-end-date').value;
+        const endTime = document.getElementById('res-end-time').value;
+
+        // Populate summary
+        document.getElementById('complete-unit').textContent = unit;
+        document.getElementById('complete-item').textContent = item;
+
+        // Format period
+        const start = new Date(startDate + 'T' + startTime);
+        const end = new Date(endDate + 'T' + endTime);
+        const formatDateTime = (d) => {
+            const month = (d.getMonth() + 1).toString().padStart(2, '0');
+            const day = d.getDate().toString().padStart(2, '0');
+            const year = d.getFullYear().toString().slice(-2);
+            let hours = d.getHours();
+            const minutes = d.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            return `${month}/${day}/${year} ${hours}:${minutes} ${ampm}`;
+        };
+
+        document.getElementById('complete-period').textContent = `${formatDateTime(start)} - ${formatDateTime(end)}`;
+
+        // Clear return notes
+        document.getElementById('complete-return-notes').value = '';
+
+        // Store tx_id for submission
+        document.getElementById('complete-reservation-form').dataset.txId = txId;
+
+        // Show modal
+        document.getElementById('complete-reservation-modal').classList.remove('hidden');
+    },
+
+    handleCompleteSubmit: async (e) => {
+        e.preventDefault();
+
+        const form = e.target;
+        const txId = form.dataset.txId;
+        const returnNotes = document.getElementById('complete-return-notes').value;
+        const refreshBtn = document.getElementById('refresh-data-btn');
+
+        try {
+            // Start spinner
+            if (refreshBtn) refreshBtn.classList.add('spinning');
+
+            const response = await API.completeReservation(txId, returnNotes, App.selectedStaff ? (App.selectedStaff.name || App.selectedStaff.staff_name) : 'Staff');
+
+            if (response.status === 'success') {
+                // Close both modals
+                document.getElementById('complete-reservation-modal').classList.add('hidden');
+                document.getElementById('reservation-modal').classList.add('hidden');
+
+                // Reload data
+                await App.loadData(true, false);
+
+                App.showAlert('Reservation marked as complete!', 'success');
+            } else {
+                App.showAlert(response.message || 'Error completing reservation', 'error');
+            }
+        } catch (error) {
+            console.error('Completion failed:', error);
+            App.showAlert('Failed to complete reservation.', 'error');
+        } finally {
+            if (refreshBtn) refreshBtn.classList.remove('spinning');
+        }
+    },
+
     renderListView: () => {
         const tbody = document.querySelector('#reservations-table tbody');
         tbody.innerHTML = '';
@@ -1162,11 +1382,177 @@ const App = {
         }
     },
 
+    // --- Notifications Logic ---
+
+    initNotifications: () => {
+        // Bind notifications button click
+        document.getElementById('notifications-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            App.toggleNotifications();
+        });
+
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            const popover = document.getElementById('notifications-popover');
+            if (!popover.classList.contains('hidden') &&
+                !popover.contains(e.target) &&
+                !e.target.closest('#notifications-btn')) {
+                popover.classList.add('hidden');
+            }
+        });
+    },
+
+    toggleNotifications: () => {
+        const popover = document.getElementById('notifications-popover');
+        const button = document.getElementById('notifications-btn');
+
+        if (popover.classList.contains('hidden')) {
+            // Position popover below button
+            const rect = button.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+
+            popover.style.top = `${rect.bottom + scrollTop + 8}px`;
+            popover.style.left = `${rect.left + scrollLeft}px`;
+
+            // Render notifications before showing
+            App.renderNotifications();
+
+            popover.classList.remove('hidden');
+        } else {
+            popover.classList.add('hidden');
+        }
+    },
+
+    updateNotifications: () => {
+        // Count unique reservations (by tx_id) that need completion
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const uniqueTxIds = new Set();
+
+        App.reservations.forEach(res => {
+            const props = res.extendedProps;
+
+            // Only count scheduled reservations where end date has passed
+            if (props.status === 'Scheduled') {
+                const endDate = new Date(props.end_time);
+                endDate.setHours(0, 0, 0, 0);
+
+                if (endDate <= today) {
+                    uniqueTxIds.add(props.tx_id);
+                }
+            }
+        });
+
+        const count = uniqueTxIds.size;
+        const badge = document.getElementById('notifications-badge');
+
+        if (count > 0) {
+            badge.textContent = count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    },
+
+    renderNotifications: () => {
+        const list = document.getElementById('notifications-list');
+        if (!list) return;
+
+        list.innerHTML = '';
+
+        // Get unique reservations that need completion
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const pendingReservations = new Map(); // Use Map to group by tx_id
+
+        App.reservations.forEach(res => {
+            const props = res.extendedProps;
+
+            if (props.status === 'Scheduled') {
+                const endDate = new Date(props.end_time);
+                endDate.setHours(0, 0, 0, 0);
+
+                if (endDate <= today) {
+                    // If we haven't seen this tx_id yet, or if this is the first item, store it
+                    if (!pendingReservations.has(props.tx_id)) {
+                        pendingReservations.set(props.tx_id, props);
+                    }
+                }
+            }
+        });
+
+        if (pendingReservations.size === 0) {
+            list.innerHTML = '<div class="notifications-empty">No pending completions</div>';
+            return;
+        }
+
+        // Sort by end date (oldest first)
+        const sortedReservations = Array.from(pendingReservations.values()).sort((a, b) => {
+            return new Date(a.end_time) - new Date(b.end_time);
+        });
+
+        sortedReservations.forEach(props => {
+            const item = document.createElement('div');
+            item.className = 'notification-item';
+            item.dataset.txId = props.tx_id;
+
+            const endDate = new Date(props.end_time);
+            const daysOverdue = Math.floor((today - endDate) / (1000 * 60 * 60 * 24));
+
+            // Format dates
+            const formatDateTime = (d) => {
+                const date = new Date(d);
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const day = date.getDate().toString().padStart(2, '0');
+                const year = date.getFullYear().toString().slice(-2);
+                let hours = date.getHours();
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12;
+                hours = hours ? hours : 12;
+                return `${month}/${day}/${year} ${hours}:${minutes} ${ampm}`;
+            };
+
+            const overdueText = daysOverdue > 0 ? `${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue` : 'Due today';
+
+            item.innerHTML = `
+                <div class="notification-item-header">
+                    <span class="notification-item-unit">Unit ${props.rented_to}</span>
+                    <span class="notification-item-overdue">${overdueText}</span>
+                </div>
+                <div class="notification-item-item">${props.item}</div>
+                <div class="notification-item-period">${formatDateTime(props.start_time)} - ${formatDateTime(props.end_time)}</div>
+            `;
+
+            item.addEventListener('click', () => {
+                App.openNotificationReservation(props);
+            });
+
+            list.appendChild(item);
+        });
+    },
+
+    openNotificationReservation: (props) => {
+        // Close notifications popover
+        document.getElementById('notifications-popover').classList.add('hidden');
+
+        // Open the reservation in edit mode first
+        App.openReservationModal(props);
+
+        // Then open the complete modal directly
+        setTimeout(() => {
+            App.openCompleteModal();
+        }, 100);
+    },
+
     getStatusColor: (status) => {
         switch (status) {
-            case 'Scheduled': return '#1a237e';
-            case 'Complete': return '#10b981';
-            case 'Cancelled': return '#ef4444';
+            case 'Scheduled': return '#1a237e'; // Primary blue
+            case 'Complete': return '#10b981'; // Success green
+            case 'Cancelled': return '#ef4444'; // Error red
             default: return '#6b7280';
         }
     },
@@ -1472,9 +1858,8 @@ const App = {
     // ... (rest of App object)
     getStatusColor: (status) => {
         switch (status) {
-            case 'Scheduled': return '#1a237e'; // Primary
-            case 'Active': return '#10b981'; // Success
-            case 'Completed': return '#6b7280'; // Muted
+            case 'Scheduled': return '#1a237e'; // Primary blue
+            case 'Complete': return '#10b981'; // Success green
             case 'Cancelled': return '#e5e7eb'; // Light Grey (Background)
             default: return '#1a237e';
         }
@@ -1483,6 +1868,7 @@ const App = {
     getStatusBorderColor: (status) => {
         switch (status) {
             case 'Cancelled': return '#d1d5db'; // Slightly darker grey for border
+            case 'Complete': return '#059669'; // Darker green for border
             default: return App.getStatusColor(status);
         }
     },
@@ -1490,6 +1876,7 @@ const App = {
     getStatusTextColor: (status) => {
         switch (status) {
             case 'Cancelled': return '#9ca3af'; // Grey text
+            case 'Complete': return '#ffffff'; // White text
             default: return '#ffffff'; // White text
         }
     },

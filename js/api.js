@@ -4,7 +4,7 @@
  * Implements Stale-While-Revalidate caching strategy
  */
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwezMor58DMRrDTLMS0OdjZZQqlck-Gl5urK7uJJVB6IbldrFoaoNGo6qGtHSWXIfBcTQ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzelL6zG2k3wPsnLDOe3q5q_4gx1RgdoATeUFSXBWqJiv6urbgXmvV5WKMs5kR_7Nm_4A/exec';
 
 const API = {
     // Check if API is configured
@@ -146,5 +146,6 @@ const API = {
     updateReservation: (reservation) => API.request('updateReservation', { reservation }, { useCache: false }),
     cancelReservation: (tx_id) => API.request('cancelReservation', { tx_id }, { useCache: false }),
     deleteReservation: (tx_id) => API.request('deleteReservation', { tx_id }, { useCache: false }),
-    restoreReservation: (tx_id) => API.request('restoreReservation', { tx_id }, { useCache: false })
+    restoreReservation: (tx_id) => API.request('restoreReservation', { tx_id }, { useCache: false }),
+    completeReservation: (tx_id, return_notes, completed_by) => API.request('completeReservation', { tx_id, return_notes, completed_by }, { useCache: false })
 };
