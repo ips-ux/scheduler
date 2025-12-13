@@ -48,6 +48,9 @@
                     <button id="view-list" class="nav-btn">List View</button>
                 </nav>
                 <button id="new-reservation-btn" class="primary-btn">+ New Reservation</button>
+
+            </div>
+            <div class="header-right">
                 <button id="notifications-btn" class="notifications-btn" title="Pending Completions">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -56,8 +59,6 @@
                     </svg>
                     <span id="notifications-badge" class="notifications-badge hidden">0</span>
                 </button>
-            </div>
-            <div class="header-right">
                 <button id="refresh-data-btn" class="icon-btn" title="Refresh Data">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -268,7 +269,8 @@
                             style="margin-right: auto;">Cancel Reservation</button>
                         <button type="button" class="primary-btn hidden" id="restore-reservation-btn"
                             style="margin-right: auto;">Restore Reservation</button>
-                        <button type="button" class="success-btn hidden" id="complete-reservation-btn">Complete Reservation</button>
+                        <button type="button" class="success-btn hidden" id="complete-reservation-btn">Complete
+                            Reservation</button>
                         <button type="submit" class="primary-btn">Save Reservation</button>
                     </div>
                 </form>
@@ -302,7 +304,8 @@
 
                     <div class="form-group">
                         <label for="complete-return-notes">Return Notes</label>
-                        <textarea id="complete-return-notes" rows="4" placeholder="Document the condition of returned items, any damages, missing items, etc."></textarea>
+                        <textarea id="complete-return-notes" rows="4"
+                            placeholder="Document the condition of returned items, any damages, missing items, etc."></textarea>
                     </div>
 
                     <div class="form-actions">

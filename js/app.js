@@ -697,7 +697,7 @@ const App = {
             let current = new Date(start);
             // Simple day loop
             while (current < end) {
-                const day = current.getDay(); // 0=Sun, 6=Sat
+                const day = current.getUTCDay(); // 0=Sun, 6=Sat
                 // Fri(5) and Sat(6) are weekends? 
                 // "Fri-Sat" usually means Fri night and Sat night.
                 // If day is 5 (Fri) or 6 (Sat), rate is higher.
