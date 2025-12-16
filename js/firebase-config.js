@@ -19,16 +19,7 @@ const analytics = firebase.analytics();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
     .then(() => {
         console.log('Firebase Auth persistence set to LOCAL');
-        // Initialize Auth after persistence is set
-        if (window.Auth) {
-            Auth.init();
-        }
     })
     .catch((error) => {
         console.error('Error setting auth persistence:', error);
-        // Still try to initialize even if persistence fails
-        if (window.Auth) {
-            Auth.init();
-        }
     });
-

@@ -6,16 +6,36 @@
 const Auth = {
     user: null,
     credential: null, // Store OAuth credential for Gmail API
+    authInitialized: false, // Track if initial auth check is complete
 
     init: () => {
+        console.log('Auth.init() called');
+
         // Listen for auth state changes
         auth.onAuthStateChanged(user => {
+            console.log('onAuthStateChanged fired, user:', user ? user.email : 'null', 'initialized:', Auth.authInitialized);
+
             if (user) {
                 Auth.validateUser(user);
             } else {
-                Auth.user = null;
-                document.getElementById('login-overlay').classList.add('active');
-                document.getElementById('app-container').classList.add('hidden');
+                // CRITICAL FIX: Only show login screen if auth has been initialized
+                // This prevents kicking out users while Firebase is still checking for existing session
+                if (Auth.authInitialized) {
+                    console.log('No user found after initialization, showing login');
+                    Auth.user = null;
+                    const loginOverlay = document.getElementById('login-overlay');
+                    const appContainer = document.getElementById('app-container');
+                    if (loginOverlay) loginOverlay.classList.add('active');
+                    if (appContainer) appContainer.classList.add('hidden');
+                } else {
+                    console.log('Auth not yet initialized, waiting for Firebase to check session...');
+                }
+            }
+
+            // Mark auth as initialized after first check
+            if (!Auth.authInitialized) {
+                Auth.authInitialized = true;
+                console.log('Auth initialization complete');
             }
         });
 
@@ -120,6 +140,7 @@ const Auth = {
         auth.signOut().then(() => {
             Auth.user = null;
             Auth.credential = null;
+            Auth.authInitialized = false; // Reset initialization flag
             // Clear stored OAuth token
             try {
                 localStorage.removeItem('gmail_oauth_token');
@@ -138,3 +159,16 @@ const Auth = {
 
 // Global callback for Google Sign-In
 window.handleCredentialResponse = Auth.handleCredentialResponse;
+
+// Initialize Auth when this script loads
+// Wait for DOM to be ready first
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM ready, initializing Auth...');
+        Auth.init();
+    });
+} else {
+    // DOM already loaded
+    console.log('DOM already ready, initializing Auth...');
+    Auth.init();
+}
