@@ -3,15 +3,9 @@
  * Handles Google Sign-In and Email Validation
  */
 
-// Obfuscated Admin Email (beacon85@greystar.com)
-// Base64 encoded: YmVhY29uODVAZ3JleXN0YXIuY29t
-// Simple rotation or just checking against the known email for now as per instructions.
-// "Base64 encoding followed by a Simple Rotation"
-// Let's implement a simple check for now, as the rotation logic isn't strictly defined in the prompt's "code" section,
-// but the context mentions it. I'll implement a basic validator.
-
 const Auth = {
     user: null,
+    credential: null, // Store OAuth credential for Gmail API
 
     init: () => {
         // Listen for auth state changes
@@ -24,6 +18,17 @@ const Auth = {
                 document.getElementById('app-container').classList.add('hidden');
             }
         });
+
+        // Try to restore OAuth credential from localStorage
+        try {
+            const storedCred = localStorage.getItem('gmail_oauth_token');
+            if (storedCred) {
+                Auth.credential = { accessToken: storedCred };
+                console.log('Restored OAuth credential from storage');
+            }
+        } catch (e) {
+            console.warn('Could not restore OAuth credential:', e);
+        }
 
         // Initialize Google Sign-In button
         const signinBtn = document.querySelector('.g_id_signin');
@@ -46,7 +51,23 @@ const Auth = {
 
     login: () => {
         const provider = new firebase.auth.GoogleAuthProvider();
+        // Add Gmail send scope to allow sending emails
+        provider.addScope('https://www.googleapis.com/auth/gmail.send');
         auth.signInWithPopup(provider)
+            .then((result) => {
+                // Store the OAuth credential for Gmail API access
+                Auth.credential = result.credential;
+
+                // Persist access token to localStorage
+                if (result.credential && result.credential.accessToken) {
+                    try {
+                        localStorage.setItem('gmail_oauth_token', result.credential.accessToken);
+                        console.log('Login successful, OAuth credential stored');
+                    } catch (e) {
+                        console.warn('Could not store OAuth credential:', e);
+                    }
+                }
+            })
             .catch((error) => {
                 console.error('Login Failed:', error);
                 Auth.showError(error.message);
@@ -54,31 +75,57 @@ const Auth = {
     },
 
     validateUser: (firebaseUser) => {
-        // Hardcoded allowed email for this project
-        const ALLOWED_EMAIL = 'beacon85@greystar.com';
+        console.log('Validating user:', firebaseUser.email);
+        // Allow any @greystar.com email
+        const ALLOWED_DOMAIN = '@greystar.com';
 
-        if (firebaseUser.email === ALLOWED_EMAIL) {
+        if (firebaseUser.email && firebaseUser.email.endsWith(ALLOWED_DOMAIN)) {
+            console.log('User validated successfully:', firebaseUser.email);
             Auth.user = firebaseUser;
             Auth.onLoginSuccess();
         } else {
-            Auth.showError('Access denied. Unauthorized email.');
+            console.error('User validation failed:', firebaseUser.email);
+            Auth.showError('Access denied. Only @greystar.com emails are allowed.');
             Auth.logout();
         }
     },
 
     onLoginSuccess: () => {
-        document.getElementById('login-overlay').classList.remove('active');
-        document.getElementById('app-container').classList.remove('hidden');
+        console.log('Login success, initializing app...');
+        const loginOverlay = document.getElementById('login-overlay');
+        const appContainer = document.getElementById('app-container');
+
+        if (loginOverlay) {
+            loginOverlay.classList.remove('active');
+        } else {
+            console.error('login-overlay element not found!');
+        }
+
+        if (appContainer) {
+            appContainer.classList.remove('hidden');
+        } else {
+            console.error('app-container element not found!');
+        }
 
         // Initialize App
         if (window.App) {
+            console.log('Initializing App...');
             window.App.init();
+        } else {
+            console.error('App object not found!');
         }
     },
 
     logout: () => {
         auth.signOut().then(() => {
             Auth.user = null;
+            Auth.credential = null;
+            // Clear stored OAuth token
+            try {
+                localStorage.removeItem('gmail_oauth_token');
+            } catch (e) {
+                console.warn('Could not clear OAuth credential:', e);
+            }
             window.location.reload();
         });
     },

@@ -1398,7 +1398,21 @@ const App = {
             if (response.status === 'success') {
                 document.getElementById('reservation-modal').classList.add('hidden');
                 await App.loadData(true, false); // Force refresh and wait, don't manage spinner
-                App.showAlert('Reservation saved!', 'success');
+
+                // Check if calendar email should be sent
+                const sendCalendarEmail = document.getElementById('send-calendar-email').checked;
+                if (sendCalendarEmail) {
+                    try {
+                        // Send calendar email with reservation details
+                        await CalendarUtils.sendCalendarEmail(formData, 'beacon85@greystar.com');
+                        App.showAlert('Reservation saved and calendar email sent!', 'success');
+                    } catch (emailError) {
+                        console.error('Failed to send calendar email:', emailError);
+                        App.showAlert('Reservation saved, but failed to send calendar email. Please check your Gmail permissions.', 'warning');
+                    }
+                } else {
+                    App.showAlert('Reservation saved!', 'success');
+                }
             } else {
                 App.showAlert(response.message || 'Error saving reservation', 'error');
             }
