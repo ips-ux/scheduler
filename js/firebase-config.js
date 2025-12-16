@@ -1,0 +1,16 @@
+// Firebase Configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDjaqIfSrorLTCLUQQjEAt3lkYyyo6h8dw",
+    authDomain: "ips-ux-scheduler.firebaseapp.com",
+    projectId: "ips-ux-scheduler",
+    storageBucket: "ips-ux-scheduler.firebasestorage.app",
+    messagingSenderId: "24939687104",
+    appId: "1:24939687104:web:d020687cf7cb9fd7271125",
+    measurementId: "G-4KBZ1MJGLK"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+const analytics = firebase.analytics();

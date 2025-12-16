@@ -8,6 +8,10 @@ const App = {
     reservations: [],
     staff: [],
     selectedStaff: null,
+    currentSortField: 'item_id',
+    currentSortDirection: 'asc',
+    currentReservationSortField: null,
+    currentReservationSortDirection: 'asc',
 
     init: async () => {
         console.log('App Initializing...');
@@ -63,16 +67,50 @@ const App = {
                         App.renderStaffList();
                     }
                     if (type === 'reservations') {
-                        App.reservations = response.data.map(r => ({
-                            title: `${r.rented_to} - ${r.item}`,
-                            start: r.start_time,
-                            end: r.end_time,
-                            extendedProps: r,
-                            classNames: [r.status.toLowerCase()],
-                            backgroundColor: App.getStatusColor(r.status),
-                            borderColor: App.getStatusBorderColor(r.status),
-                            textColor: App.getStatusTextColor(r.status)
-                        }));
+                        // Flatten reservations: if a reservation has multiple items, create an event for each
+                        const events = [];
+                        response.data.forEach(r => {
+                            // Determine items to display
+                            let itemsToDisplay = [];
+                            if (r.items && Array.isArray(r.items) && r.items.length > 0) {
+                                itemsToDisplay = r.items;
+                            } else if (r.item) {
+                                itemsToDisplay = [r.item];
+                            } else {
+                                itemsToDisplay = ['Unknown Item'];
+                            }
+
+                            // Determine color based on resource_type
+                            let bgColor, borderColor;
+                            if (r.resource_type === 'GUEST_SUITE') {
+                                bgColor = '#FBC02D'; // Yellow 700
+                                borderColor = '#F9A825'; // Yellow 800
+                            } else if (r.resource_type === 'GEAR_SHED') {
+                                bgColor = '#2E7D32'; // Green 800
+                                borderColor = '#1B5E20'; // Green 900
+                            } else if (r.resource_type === 'SKY_LOUNGE') {
+                                bgColor = '#1565C0'; // Blue 800
+                                borderColor = '#0D47A1'; // Blue 900
+                            } else {
+                                // Default colors based on status (fallback)
+                                bgColor = App.getStatusColor(r.status);
+                                borderColor = App.getStatusBorderColor(r.status);
+                            }
+
+                            itemsToDisplay.forEach(itemName => {
+                                events.push({
+                                    title: `${itemName} - ${r.rented_to}`,
+                                    start: r.start_time,
+                                    end: r.end_time,
+                                    extendedProps: { ...r, item: itemName }, // Override item for this specific event
+                                    classNames: [r.status.toLowerCase()],
+                                    backgroundColor: bgColor,
+                                    borderColor: borderColor,
+                                    textColor: '#ffffff' // Ensure white text for contrast
+                                });
+                            });
+                        });
+                        App.reservations = events;
 
                         // Update UI
                         App.calendar.removeAllEvents();
@@ -202,11 +240,321 @@ const App = {
             App.loadData(true); // Force refresh
         });
 
+
+
         // Logout
         document.getElementById('logout-btn').addEventListener('click', Auth.logout);
 
         // Enhance Date/Time Inputs
         App.enhanceDateInputs();
+
+        // Items View
+        document.getElementById('view-items').addEventListener('click', () => App.switchView('items'));
+        document.getElementById('new-item-btn').addEventListener('click', App.handleNewItem);
+        document.getElementById('search-items').addEventListener('input', App.handleItemSearch);
+
+
+
+        // Sortable table headers (Items)
+        document.querySelectorAll('#items-table th.sortable').forEach(header => {
+            header.addEventListener('click', () => {
+                const sortField = header.dataset.sort;
+                App.handleSort(sortField);
+            });
+        });
+
+        // Sortable table headers (Reservations)
+        document.querySelectorAll('#reservations-table th.sortable').forEach(header => {
+            header.addEventListener('click', () => {
+                const sortField = header.dataset.sort;
+                App.handleReservationSort(sortField);
+            });
+        });
+    },
+
+    renderItemsView: () => {
+        const view = document.getElementById('items-view');
+        console.log('Rendering Items View...', App.items);
+        console.log('Items View Classes:', view.className);
+
+        if (view.classList.contains('hidden')) {
+            console.error('Items view is still hidden!');
+            view.classList.remove('hidden');
+        }
+
+        const tbody = document.querySelector('#items-table tbody');
+        if (!tbody) {
+            console.error('Items table body not found!');
+            return;
+        }
+        tbody.innerHTML = '';
+
+        // Update sort indicators
+        document.querySelectorAll('#items-table th.sortable').forEach(header => {
+            header.classList.remove('sort-asc', 'sort-desc');
+            if (header.dataset.sort === App.currentSortField) {
+                header.classList.add(`sort-${App.currentSortDirection}`);
+            }
+        });
+
+        const searchInput = document.getElementById('search-items');
+        const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+        if (!App.items || App.items.length === 0) {
+            console.warn('No items to render.');
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No items found.</td></tr>';
+            return;
+        }
+
+        const filteredItems = App.items.filter(item =>
+            (item.item && item.item.toLowerCase().includes(searchTerm)) ||
+            (item.item_id && item.item_id.toLowerCase().includes(searchTerm)) ||
+            (item.resource_type && item.resource_type.toLowerCase().includes(searchTerm))
+        );
+
+
+        // Sort by current field and direction
+        if (App.currentSortField) {
+            filteredItems.sort((a, b) => {
+                const field = App.currentSortField;
+                let valueA = (a[field] || '').toString();
+                let valueB = (b[field] || '').toString();
+
+                // Try numeric comparison first if both are numbers
+                const numA = parseInt(valueA);
+                const numB = parseInt(valueB);
+
+                let comparison = 0;
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    comparison = numA - numB;
+                } else {
+                    // Fall back to string comparison
+                    comparison = valueA.localeCompare(valueB);
+                }
+
+                // Apply sort direction
+                return App.currentSortDirection === 'asc' ? comparison : -comparison;
+            });
+        } else {
+            // Default sort by item_id if no sort field
+            filteredItems.sort((a, b) => {
+                return (parseInt(a.item_id) || 0) - (parseInt(b.item_id) || 0);
+            });
+        }
+
+
+        console.log(`Rendering ${filteredItems.length} items (filtered from ${App.items.length})`);
+
+        filteredItems.forEach(item => {
+            const tr = document.createElement('tr');
+
+            // Item ID (Read-only)
+            tr.innerHTML += `<td>${item.item_id || '-'}</td>`;
+
+            // Item Name (Editable Text)
+            tr.appendChild(App.createEditableCell(item, 'item', 'text'));
+
+            // Description (Editable Text)
+            tr.appendChild(App.createEditableCell(item, 'description', 'text'));
+
+            // Resource Type (Editable Popover)
+            tr.appendChild(App.createEditableCell(item, 'resource_type', 'popover', ['GEAR_SHED', 'SKY_LOUNGE', 'GUEST_SUITE']));
+
+            // Service Status (Editable Popover)
+            tr.appendChild(App.createEditableCell(item, 'service_status', 'popover', ['In Service', 'Not In Service']));
+
+            // Service Notes (Editable Text)
+            tr.appendChild(App.createEditableCell(item, 'service_notes', 'text'));
+
+            // Actions
+            const actionsTd = document.createElement('td');
+            // Add delete button if needed, for now just placeholder
+            actionsTd.innerHTML = '';
+            tr.appendChild(actionsTd);
+
+            tbody.appendChild(tr);
+        });
+    },
+
+    createEditableCell: (item, field, type, options = []) => {
+        const td = document.createElement('td');
+        td.className = 'editable-cell';
+        td.textContent = item[field] || (type === 'popover' ? 'Select...' : '-');
+
+        // Colorize status
+        if (field === 'service_status') {
+            if (item[field] === 'In Service') td.style.color = 'var(--success)';
+            if (item[field] === 'Not In Service') td.style.color = 'var(--error)';
+        }
+
+        td.addEventListener('click', (e) => {
+            if (td.querySelector('input') || document.querySelector('.popover')) return; // Already editing
+
+            if (type === 'text') {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'editable-input';
+                input.value = item[field] || '';
+
+                const save = async () => {
+                    const newValue = input.value.trim();
+                    if (newValue !== item[field]) {
+                        const updatedItem = { ...item, [field]: newValue };
+                        const res = await API.updateItem(updatedItem);
+                        if (res.status === 'success') {
+                            // Update local state
+                            const idx = App.items.findIndex(i => i.item_id === item.item_id);
+                            if (idx !== -1) App.items[idx] = updatedItem;
+                            App.renderItemsView();
+                        } else {
+                            alert('Failed to update item: ' + res.message);
+                            td.textContent = item[field] || '-';
+                        }
+                    } else {
+                        td.textContent = item[field] || '-';
+                    }
+                };
+
+                input.addEventListener('blur', save);
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        input.blur();
+                    }
+                });
+
+                td.innerHTML = '';
+                td.appendChild(input);
+                input.focus();
+            } else if (type === 'popover') {
+                App.showPopover(e.target, options, async (selected) => {
+                    const updatedItem = { ...item, [field]: selected };
+                    const res = await API.updateItem(updatedItem);
+                    if (res.status === 'success') {
+                        const idx = App.items.findIndex(i => i.item_id === item.item_id);
+                        if (idx !== -1) App.items[idx] = updatedItem;
+                        App.renderItemsView();
+                    } else {
+                        alert('Failed to update item: ' + res.message);
+                    }
+                });
+            }
+        });
+
+        return td;
+    },
+
+    showPopover: (target, options, onSelect) => {
+        // Remove existing popovers
+        document.querySelectorAll('.popover').forEach(p => p.remove());
+
+        const popover = document.createElement('div');
+        popover.className = 'popover';
+
+        const content = document.createElement('div');
+        content.className = 'popover-content popover-list';
+
+        options.forEach(opt => {
+            const div = document.createElement('div');
+            div.className = 'popover-item';
+            div.textContent = opt;
+            div.addEventListener('click', () => {
+                onSelect(opt);
+                popover.remove();
+            });
+            content.appendChild(div);
+        });
+
+        popover.appendChild(content);
+        document.body.appendChild(popover);
+
+        // Position
+        const rect = target.getBoundingClientRect();
+        popover.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        popover.style.left = `${rect.left + window.scrollX}px`;
+
+        // Close on click outside
+        const closeHandler = (e) => {
+            if (!popover.contains(e.target) && e.target !== target) {
+                popover.remove();
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeHandler), 0);
+    },
+
+    handleNewItem: async () => {
+        const newItem = {
+            item: 'New Item',
+            resource_type: 'GEAR_SHED',
+            service_status: 'In Service',
+            description: '',
+            service_notes: ''
+        };
+
+        const res = await API.createItem(newItem);
+        if (res.status === 'success') {
+            App.items.push(res.data);
+            App.renderItemsView();
+            // Scroll to bottom?
+        } else {
+            alert('Failed to create item: ' + res.message);
+        }
+    },
+
+    handleItemSearch: () => {
+        App.renderItemsView();
+    },
+
+    handleSort: (field) => {
+        // Toggle direction if clicking the same field: Asc -> Desc -> Clear
+        if (App.currentSortField === field) {
+            if (App.currentSortDirection === 'asc') {
+                App.currentSortDirection = 'desc';
+            } else if (App.currentSortDirection === 'desc') {
+                App.currentSortField = null; // Clear sort
+                App.currentSortDirection = 'asc'; // Reset direction preference
+            }
+        } else {
+            App.currentSortField = field;
+            App.currentSortDirection = 'asc';
+        }
+
+        // Update header visual indicators
+        document.querySelectorAll('#items-table th.sortable').forEach(header => {
+            header.classList.remove('sort-asc', 'sort-desc');
+            if (header.dataset.sort === field) {
+                header.classList.add(`sort-${App.currentSortDirection}`);
+            }
+        });
+
+        // Re-render the view with new sort
+        App.renderItemsView();
+    },
+
+    handleReservationSort: (field) => {
+        // Toggle direction if clicking the same field: Asc -> Desc -> Clear
+        if (App.currentReservationSortField === field) {
+            if (App.currentReservationSortDirection === 'asc') {
+                App.currentReservationSortDirection = 'desc';
+            } else if (App.currentReservationSortDirection === 'desc') {
+                App.currentReservationSortField = null; // Clear sort
+                App.currentReservationSortDirection = 'asc'; // Reset direction preference
+            }
+        } else {
+            App.currentReservationSortField = field;
+            App.currentReservationSortDirection = 'asc';
+        }
+
+        // Update header visual indicators
+        document.querySelectorAll('#reservations-table th.sortable').forEach(header => {
+            header.classList.remove('sort-asc', 'sort-desc');
+            if (header.dataset.sort === field && App.currentReservationSortField) {
+                header.classList.add(`sort-${App.currentReservationSortDirection}`);
+            }
+        });
+
+        // Re-render the view with new sort
+        App.renderListView();
     },
 
     enhanceDateInputs: () => {
@@ -254,16 +602,73 @@ const App = {
     },
 
     switchView: (viewName) => {
-        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+        // Get all view sections
+        const allViews = document.querySelectorAll('.view-section');
+        const currentView = document.querySelector('.view-section:not(.hidden)');
+
+        // Update nav buttons
         document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
 
+        // Determine which view to show
+        let targetView, targetBtn;
         if (viewName === 'calendar') {
-            document.getElementById('calendar-view').classList.remove('hidden');
-            document.getElementById('view-calendar').classList.add('active');
-            App.calendar.render(); // Re-render to fix sizing
+            targetView = document.getElementById('calendar-view');
+            targetBtn = document.getElementById('view-calendar');
+        } else if (viewName === 'list') {
+            targetView = document.getElementById('list-view');
+            targetBtn = document.getElementById('view-list');
+        } else if (viewName === 'items') {
+            targetView = document.getElementById('items-view');
+            targetBtn = document.getElementById('view-items');
+        }
+
+        // If switching to the same view, do nothing
+        if (currentView === targetView) {
+            targetBtn.classList.add('active');
+            return;
+        }
+
+        // Fade out current view
+        if (currentView) {
+            currentView.classList.add('fade-out');
+
+            // After fade out completes, hide it and show new view
+            setTimeout(() => {
+                currentView.classList.add('hidden');
+                currentView.classList.remove('fade-out');
+
+                // Show and fade in new view
+                targetView.classList.remove('hidden');
+                targetView.classList.add('fade-in');
+                targetBtn.classList.add('active');
+
+                // Perform view-specific actions
+                if (viewName === 'calendar') {
+                    App.calendar.render(); // Re-render to fix sizing
+                } else if (viewName === 'items') {
+                    App.renderItemsView();
+                }
+
+                // Remove fade-in class after all animations complete (500ms + 250ms delay)
+                setTimeout(() => {
+                    targetView.classList.remove('fade-in');
+                }, 800);
+            }, 300); // Match CSS transition duration
         } else {
-            document.getElementById('list-view').classList.remove('hidden');
-            document.getElementById('view-list').classList.add('active');
+            // No current view, just show the target
+            targetView.classList.remove('hidden');
+            targetView.classList.add('fade-in');
+            targetBtn.classList.add('active');
+
+            if (viewName === 'calendar') {
+                App.calendar.render();
+            } else if (viewName === 'items') {
+                App.renderItemsView();
+            }
+
+            setTimeout(() => {
+                targetView.classList.remove('fade-in');
+            }, 800);
         }
     },
 
@@ -379,7 +784,7 @@ const App = {
                 const priceLabel = document.getElementById('price-label');
                 const priceDisplay = document.getElementById('res-price');
                 priceLabel.textContent = 'Cancellation Fee';
-                priceDisplay.textContent = `$${parseFloat(data.total_cost || 0).toFixed(2)}`;
+                priceDisplay.textContent = `$${parseFloat(data.cancellation_fee || 0).toFixed(2)}`;
             } else {
                 // Calculate regular price
                 const priceLabel = document.getElementById('price-label');
@@ -405,9 +810,9 @@ const App = {
                     endDate.value = endDateObj.toISOString().split('T')[0];
                     endTime.value = '11:00';
                 } else if (type === 'SKY_LOUNGE') {
-                    // Default to 4pm start, 8pm end (4 hours)
-                    startTime.value = '16:00';
-                    endTime.value = '20:00';
+                    // Default to 10am start, 2pm end (4 hours)
+                    startTime.value = '10:00';
+                    endTime.value = '14:00';
                     endDate.value = startDate.value; // Same day
                 } else if (type === 'GEAR_SHED') {
                     // Set to same day
@@ -484,6 +889,13 @@ const App = {
         const itemSelectGroup = document.getElementById('item-select-group');
         const overrideContainer = document.getElementById('override-container');
         const priceContainer = document.getElementById('price-container');
+        const modalHeader = document.querySelector('#reservation-modal .modal-header h2');
+
+        // Reset Header Color
+        modalHeader.className = ''; // Remove existing color classes
+        if (type === 'GUEST_SUITE') modalHeader.classList.add('text-guest-suite');
+        if (type === 'GEAR_SHED') modalHeader.classList.add('text-gear-shed');
+        if (type === 'SKY_LOUNGE') modalHeader.classList.add('text-sky-lounge');
 
         const startDate = document.getElementById('res-start-date');
         const startTime = document.getElementById('res-start-time');
@@ -677,17 +1089,10 @@ const App = {
         App.calculatePrice();
     },
 
-    calculatePrice: () => {
-        const type = document.getElementById('res-type').value;
-        const priceDisplay = document.getElementById('res-price');
-
+    getReservationCost: (type, sDate, eDate) => {
         if (type === 'SKY_LOUNGE') {
-            priceDisplay.textContent = '$300.00';
-            return;
+            return 300.00;
         }
-
-        const sDate = document.getElementById('res-start-date').value;
-        const eDate = document.getElementById('res-end-date').value;
 
         if (type === 'GUEST_SUITE' && sDate && eDate) {
             const start = new Date(sDate);
@@ -706,10 +1111,20 @@ const App = {
                 current.setDate(current.getDate() + 1);
                 if (cost > 10000) break;
             }
-            priceDisplay.textContent = `$${cost.toFixed(2)}`;
-        } else {
-            priceDisplay.textContent = '$0.00';
+            return cost;
         }
+
+        return 0;
+    },
+
+    calculatePrice: () => {
+        const type = document.getElementById('res-type').value;
+        const priceDisplay = document.getElementById('res-price');
+        const sDate = document.getElementById('res-start-date').value;
+        const eDate = document.getElementById('res-end-date').value;
+
+        const cost = App.getReservationCost(type, sDate, eDate);
+        priceDisplay.textContent = `$${cost.toFixed(2)}`;
     },
     // --- Gear Shed Checkbox Functions ---
 
@@ -723,6 +1138,9 @@ const App = {
         const availableItems = sourceItems.filter(item =>
             !App.selectedGearShedItems.includes(item.item_id)
         );
+
+        // Sort available items alphabetically
+        availableItems.sort((a, b) => a.item.localeCompare(b.item));
 
         // Render available items
         availableList.innerHTML = '';
@@ -744,16 +1162,20 @@ const App = {
         if (App.selectedGearShedItems.length === 0) {
             selectedList.innerHTML = '<div class="item-list-empty">No items selected</div>';
         } else {
-            App.selectedGearShedItems.forEach(itemId => {
-                // Find the item object from current items
-                const itemObj = App.currentGearShedItems.find(i => i.item_id === itemId);
-                if (!itemObj) return; // Skip if not found
+            // Get item objects for selected IDs
+            const selectedItemObjects = App.selectedGearShedItems
+                .map(itemId => App.currentGearShedItems.find(i => i.item_id === itemId))
+                .filter(item => item !== undefined);
 
+            // Sort selected items alphabetically
+            selectedItemObjects.sort((a, b) => a.item.localeCompare(b.item));
+
+            selectedItemObjects.forEach(itemObj => {
                 const div = document.createElement('div');
                 div.className = 'item-list-item';
                 div.textContent = itemObj.item;
-                div.dataset.itemId = itemId;
-                div.addEventListener('click', () => App.moveToAvailable(itemId));
+                div.dataset.itemId = itemObj.item_id;
+                div.addEventListener('click', () => App.moveToAvailable(itemObj.item_id));
                 selectedList.appendChild(div);
             });
         }
@@ -880,8 +1302,14 @@ const App = {
                 const item = App.currentGearShedItems.find(i => i.item_id === id);
                 return item ? item.item : null;
             }).filter(name => name !== null);
+        } else if (type === 'GUEST_SUITE') {
+            // Guest Suite - the space itself is the item
+            selectedItems = ['Guest Suite'];
+        } else if (type === 'SKY_LOUNGE') {
+            // Sky Lounge - the space itself is the item
+            selectedItems = ['Sky Lounge'];
         } else {
-            // Get from select element (Guest Suite/Sky Lounge)
+            // Fallback: Get from select element
             selectedItems = Array.from(itemSelect.selectedOptions).map(opt => opt.value);
         }
 
@@ -899,18 +1327,49 @@ const App = {
         const eDate = document.getElementById('res-end-date').value;
         const eTime = document.getElementById('res-end-time').value;
 
+        // Guest Suite Validation: Minimum 2 nights
+        if (type === 'GUEST_SUITE') {
+            // Check if Guest Suite is In Service
+            const guestSuite = App.items.find(i => i.resource_type === 'GUEST_SUITE');
+            if (guestSuite && guestSuite.status === 'Not In Service') {
+                App.showAlert('The Guest Suite is currently Not In Service. Please activate it in the Items View to schedule.', 'error');
+                return;
+            }
+
+            const start = new Date(sDate);
+            const end = new Date(eDate);
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 2) {
+                App.showAlert('Guest Suite must be booked for 2 or more nights.', 'error');
+                return;
+            }
+        }
+
+        // Sky Lounge Validation: Check Service Status
+        if (type === 'SKY_LOUNGE') {
+            const skyLounge = App.items.find(i => i.resource_type === 'SKY_LOUNGE');
+            if (skyLounge && skyLounge.status === 'Not In Service') {
+                App.showAlert('The Sky Lounge is currently Not In Service. Please activate it in the Items View to schedule.', 'error');
+                return;
+            }
+        }
+
         const startDateTime = `${sDate}T${sTime}`;
         const endDateTime = `${eDate}T${eTime}`;
 
         const formData = {
             rented_to: document.getElementById('res-unit').value,
             resource_type: type,
-            items: selectedItems,
+            items: selectedItems, // Store array of items
+            item: selectedItems.join(', '), // Store comma-separated string for display/backward compatibility
             start_time: startDateTime,
             end_time: endDateTime,
             rental_notes: document.getElementById('res-notes').value,
             override_lock: document.getElementById('res-override').checked,
-            scheduled_by: App.selectedStaff ? (App.selectedStaff.name || App.selectedStaff.staff_name) : 'Staff'
+            scheduled_by: App.selectedStaff ? (App.selectedStaff.name || App.selectedStaff.staff_name) : 'Staff',
+            total_cost: App.getReservationCost(type, sDate, eDate)
         };
 
         // Add edit tracking if this is an update
@@ -928,10 +1387,11 @@ const App = {
 
             let response;
             if (id) {
+                // Update existing reservation
                 formData.tx_id = id;
-                formData.item = selectedItems[0]; // Fallback for edit
                 response = await API.updateReservation(formData);
             } else {
+                // Create new reservation (single document with items array)
                 response = await API.createReservation(formData);
             }
 
@@ -948,39 +1408,44 @@ const App = {
             if (refreshBtn) refreshBtn.classList.remove('spinning');
         }
     },
-
     handleCancellation: async () => {
         const id = document.getElementById('res-id').value;
+        const btn = document.getElementById('cancel-reservation-btn');
+        const refreshBtn = document.getElementById('refresh-data-btn');
         const type = document.getElementById('res-type').value;
         const startDateStr = document.getElementById('res-start-date').value;
         const startTimeStr = document.getElementById('res-start-time').value;
-        const cancelBtn = document.getElementById('cancel-reservation-btn');
-        const refreshBtn = document.getElementById('refresh-data-btn');
 
         if (!id) return;
 
         // Check if this is a DELETE action (from Cancelled state)
-        if (cancelBtn.dataset.action === 'delete') {
-            if (!confirm("Are you sure you want to permanently delete this cancelled reservation? This action cannot be undone.")) return;
+        if (btn.dataset.action === 'delete') {
+            App.showConfirmation(
+                'Delete Reservation',
+                'Are you sure you want to permanently delete this cancelled reservation? This action cannot be undone.',
+                async () => {
+                    try {
+                        // Start spinner
+                        if (refreshBtn) refreshBtn.classList.add('spinning');
 
-            try {
-                // Start spinner
-                if (refreshBtn) refreshBtn.classList.add('spinning');
-
-                const response = await API.deleteReservation(id);
-                if (response.status === 'success') {
-                    document.getElementById('reservation-modal').classList.add('hidden');
-                    await App.loadData(true, false); // Force refresh and wait, don't manage spinner
-                    App.showAlert('Reservation deleted successfully.', 'success');
-                } else {
-                    App.showAlert(response.message || 'Error deleting reservation', 'error');
-                }
-            } catch (error) {
-                console.error('Deletion failed:', error);
-                App.showAlert('Failed to delete reservation.', 'error');
-            } finally {
-                if (refreshBtn) refreshBtn.classList.remove('spinning');
-            }
+                        const response = await API.deleteReservation(id);
+                        if (response.status === 'success') {
+                            document.getElementById('reservation-modal').classList.add('hidden');
+                            await App.loadData(true, false); // Force refresh and wait, don't manage spinner
+                            App.showAlert('Reservation deleted successfully.', 'success');
+                        } else {
+                            App.showAlert(response.message || 'Error deleting reservation', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Deletion failed:', error);
+                        App.showAlert('Failed to delete reservation.', 'error');
+                    } finally {
+                        if (refreshBtn) refreshBtn.classList.remove('spinning');
+                    }
+                },
+                'Yes, Delete',
+                'var(--error)'
+            );
             return;
         }
 
@@ -1006,34 +1471,40 @@ const App = {
             message += "\n\n(No cancellation fee applies)";
         }
 
-        if (!confirm(message)) return;
+        App.showConfirmation(
+            'Cancel Reservation',
+            message,
+            async () => {
+                try {
+                    // Start spinner
+                    if (refreshBtn) refreshBtn.classList.add('spinning');
 
-        try {
-            // Start spinner
-            if (refreshBtn) refreshBtn.classList.add('spinning');
+                    let response;
+                    if (fee > 0) {
+                        // Soft Cancel (Fee applied)
+                        response = await API.cancelReservation(id, fee);
+                    } else {
+                        // Hard Delete (No fee)
+                        response = await API.deleteReservation(id);
+                    }
 
-            let response;
-            if (fee > 0) {
-                // Soft Cancel (Fee applied)
-                response = await API.cancelReservation(id);
-            } else {
-                // Hard Delete (No fee)
-                response = await API.deleteReservation(id);
-            }
-
-            if (response.status === 'success') {
-                document.getElementById('reservation-modal').classList.add('hidden');
-                await App.loadData(true, false); // Force refresh and wait, don't manage spinner
-                App.showAlert(fee > 0 ? `Reservation cancelled. $${fee} fee applied.` : 'Reservation cancelled successfully.', 'success');
-            } else {
-                App.showAlert(response.message || 'Error cancelling reservation', 'error');
-            }
-        } catch (error) {
-            console.error('Cancellation failed:', error);
-            App.showAlert('Failed to cancel reservation.', 'error');
-        } finally {
-            if (refreshBtn) refreshBtn.classList.remove('spinning');
-        }
+                    if (response.status === 'success') {
+                        document.getElementById('reservation-modal').classList.add('hidden');
+                        await App.loadData(true, false); // Force refresh and wait, don't manage spinner
+                        App.showAlert(fee > 0 ? `Reservation cancelled. $${fee} fee applied.` : 'Reservation cancelled successfully.', 'success');
+                    } else {
+                        App.showAlert(response.message || 'Error cancelling reservation', 'error');
+                    }
+                } catch (error) {
+                    console.error('Cancellation failed:', error);
+                    App.showAlert('Failed to cancel reservation.', 'error');
+                } finally {
+                    if (refreshBtn) refreshBtn.classList.remove('spinning');
+                }
+            },
+            'Yes, Cancel',
+            'var(--warning)'
+        );
     },
 
     handleRestore: async () => {
@@ -1042,26 +1513,32 @@ const App = {
 
         if (!id) return;
 
-        if (!confirm("Are you sure you want to restore this cancelled reservation? It will be returned to 'Scheduled' status.")) return;
+        App.showConfirmation(
+            'Restore Reservation',
+            "Are you sure you want to restore this cancelled reservation? It will be returned to 'Scheduled' status.",
+            async () => {
+                try {
+                    // Start spinner
+                    if (refreshBtn) refreshBtn.classList.add('spinning');
 
-        try {
-            // Start spinner
-            if (refreshBtn) refreshBtn.classList.add('spinning');
-
-            const response = await API.restoreReservation(id);
-            if (response.status === 'success') {
-                document.getElementById('reservation-modal').classList.add('hidden');
-                await App.loadData(true, false); // Force refresh and wait, don't manage spinner
-                App.showAlert('Reservation restored successfully.', 'success');
-            } else {
-                App.showAlert(response.message || 'Error restoring reservation', 'error');
-            }
-        } catch (error) {
-            console.error('Restore failed:', error);
-            App.showAlert('Failed to restore reservation.', 'error');
-        } finally {
-            if (refreshBtn) refreshBtn.classList.remove('spinning');
-        }
+                    const response = await API.restoreReservation(id);
+                    if (response.status === 'success') {
+                        document.getElementById('reservation-modal').classList.add('hidden');
+                        await App.loadData(true, false); // Force refresh and wait, don't manage spinner
+                        App.showAlert('Reservation restored successfully.', 'success');
+                    } else {
+                        App.showAlert(response.message || 'Error restoring reservation', 'error');
+                    }
+                } catch (error) {
+                    console.error('Restore failed:', error);
+                    App.showAlert('Failed to restore reservation.', 'error');
+                } finally {
+                    if (refreshBtn) refreshBtn.classList.remove('spinning');
+                }
+            },
+            'Yes, Restore',
+            'var(--success)'
+        );
     },
 
     updateCompleteButtonState: (data) => {
@@ -1216,7 +1693,57 @@ const App = {
             return `${hours}:${minutes} ${ampm}`;
         };
 
-        App.reservations.forEach(r => {
+
+
+        // Filter by status if needed (simple client-side filter for now)
+        const statusFilter = document.getElementById('filter-status').value;
+        const searchFilter = document.getElementById('search-reservations').value.toLowerCase();
+
+        let filteredReservations = App.reservations.filter(r => {
+            const props = r.extendedProps;
+            const matchesStatus = statusFilter === 'all' || props.status === statusFilter;
+            const matchesSearch = !searchFilter ||
+                (props.rented_to && props.rented_to.toLowerCase().includes(searchFilter)) ||
+                (props.item && props.item.toLowerCase().includes(searchFilter)) ||
+                (props.scheduled_by && props.scheduled_by.toLowerCase().includes(searchFilter));
+            return matchesStatus && matchesSearch;
+        });
+
+        // Sort Reservations
+        if (App.currentReservationSortField) {
+            filteredReservations.sort((a, b) => {
+                const field = App.currentReservationSortField;
+                const dir = App.currentReservationSortDirection === 'asc' ? 1 : -1;
+                let valA, valB;
+
+                // Extract values based on field
+                if (field === 'start') {
+                    valA = new Date(a.start).getTime();
+                    valB = new Date(b.start).getTime();
+                } else if (field === 'end') {
+                    valA = new Date(a.end).getTime();
+                    valB = new Date(b.end).getTime();
+                } else if (field === 'total_cost') {
+                    valA = parseFloat(a.extendedProps.total_cost || 0);
+                    valB = parseFloat(b.extendedProps.total_cost || 0);
+                } else {
+                    // String fields
+                    valA = (a.extendedProps[field] || '').toString().toLowerCase();
+                    valB = (b.extendedProps[field] || '').toString().toLowerCase();
+                }
+
+                if (valA < valB) return -1 * dir;
+                if (valA > valB) return 1 * dir;
+                return 0;
+            });
+        } else {
+            // Default Sort: Start Date Descending (Newest first)
+            filteredReservations.sort((a, b) => {
+                return new Date(b.start).getTime() - new Date(a.start).getTime();
+            });
+        }
+
+        filteredReservations.forEach(r => {
             const tr = document.createElement('tr');
             if (r.extendedProps.status === 'Cancelled') {
                 tr.classList.add('cancelled');
@@ -1225,12 +1752,36 @@ const App = {
             const rentalNotes = r.extendedProps.rental_notes || '';
             const returnNotes = r.extendedProps.return_notes || '';
 
+
+
+            // Color Coding Logic
+            let colorClass = '';
+            let typeLabel = '';
+            const type = r.extendedProps.resource_type;
+
+            if (type === 'GUEST_SUITE') {
+                colorClass = 'text-guest-suite';
+                typeLabel = 'Guest Suite';
+            } else if (type === 'GEAR_SHED') {
+                colorClass = 'text-gear-shed';
+                typeLabel = 'Gear Shed';
+            } else if (type === 'SKY_LOUNGE') {
+                colorClass = 'text-sky-lounge';
+                typeLabel = 'Sky Lounge';
+            }
+
+            // Item Cell Content: Indicator + Item Name
+            const itemContent = `
+                <span class="color-indicator ${type === 'GUEST_SUITE' ? 'bg-guest-suite' : type === 'GEAR_SHED' ? 'bg-gear-shed' : 'bg-sky-lounge'}"></span>
+                <span class="${colorClass}" style="font-weight: 500;">${r.extendedProps.item}</span>
+            `;
+
             tr.innerHTML = `
                 <td>${r.extendedProps.rented_to}</td>
-                <td>${r.extendedProps.item}</td>
+                <td>${itemContent}</td>
                 <td>${formatDate(r.start)} ${formatTime(r.start)}</td>
                 <td>${formatDate(r.end)} ${formatTime(r.end)}</td>
-                <td>$${parseFloat(r.extendedProps.total_cost || 0).toFixed(2)}</td>
+                <td>$${parseFloat(r.extendedProps.status === 'Cancelled' && r.extendedProps.cancellation_fee ? r.extendedProps.cancellation_fee : (r.extendedProps.total_cost || 0)).toFixed(2)}</td>
                 <td><span class="status-badge ${r.extendedProps.status.toLowerCase()}">${r.extendedProps.status}</span></td>
                 <td>${r.extendedProps.scheduled_by || ''}</td>
                 <td>${r.extendedProps.completed_by || ''}</td>
@@ -1413,7 +1964,7 @@ const App = {
             const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
             popover.style.top = `${rect.bottom + scrollTop + 8}px`;
-            popover.style.left = `${rect.left + scrollLeft}px`;
+            popover.style.left = `${rect.left + scrollLeft - 80}px`;
 
             // Render notifications before showing
             App.renderNotifications();
@@ -1655,6 +2206,35 @@ const App = {
         } catch (e) {
             console.error('Error initializing time picker:', e);
         }
+    },
+
+    showConfirmation: (title, message, onConfirm, confirmText = 'Yes, Proceed', confirmColor = 'var(--error)') => {
+        const modal = document.getElementById('confirmation-modal');
+        const titleEl = document.getElementById('confirmation-title');
+        const messageEl = document.getElementById('confirmation-message');
+        const confirmBtn = document.getElementById('confirmation-ok-btn');
+        const cancelBtn = document.getElementById('confirmation-cancel-btn');
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        confirmBtn.textContent = confirmText;
+        confirmBtn.style.backgroundColor = confirmColor;
+
+        // Clone button to remove old event listeners
+        const newConfirmBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+        newConfirmBtn.addEventListener('click', () => {
+            onConfirm();
+            modal.classList.add('hidden');
+        });
+
+        // Cancel button just closes modal (already handled by close-modal class, but ensure it works)
+        cancelBtn.onclick = () => {
+            modal.classList.add('hidden');
+        };
+
+        modal.classList.remove('hidden');
     },
 
     handlePickerScroll: (col) => {

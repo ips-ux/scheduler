@@ -38,9 +38,51 @@
     --radius-md: 0.5rem;
     --radius-lg: 1rem;
 
+    /* Reservation Colors */
+    --guest-suite-color: #FBC02D;
+    /* Yellow 700 */
+    --gear-shed-color: #2E7D32;
+    /* Green 800 */
+    --sky-lounge-color: #1565C0;
+    /* Blue 800 */
+
     /* Transitions */
     --transition-fast: 0.15s ease;
     --transition-normal: 0.3s ease;
+}
+
+/* Color Coding Utilities */
+.text-guest-suite {
+    color: var(--guest-suite-color) !important;
+}
+
+.text-gear-shed {
+    color: var(--gear-shed-color) !important;
+}
+
+.text-sky-lounge {
+    color: var(--sky-lounge-color) !important;
+}
+
+.bg-guest-suite {
+    background-color: var(--guest-suite-color);
+}
+
+.bg-gear-shed {
+    background-color: var(--gear-shed-color);
+}
+
+.bg-sky-lounge {
+    background-color: var(--sky-lounge-color);
+}
+
+.color-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    margin-right: 8px;
+    vertical-align: middle;
 }
 
 * {
@@ -314,11 +356,70 @@ button {
     box-shadow: var(--shadow-sm);
     padding: 0.75rem;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.view-section.fade-out {
+    opacity: 0;
+}
+
+.view-section.fade-in {
+    animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Staggered fly-up animations for child elements */
+@keyframes flyUp {
+    0% {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Apply animations to direct children when view fades in */
+.view-section.fade-in>*:nth-child(1) {
+    animation: flyUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+
+.view-section.fade-in>*:nth-child(2) {
+    animation: flyUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.view-section.fade-in>*:nth-child(3) {
+    animation: flyUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+.view-section.fade-in>*:nth-child(4) {
+    animation: flyUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+.view-section.fade-in>*:nth-child(5) {
+    animation: flyUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
 }
 
 /* Calendar */
 #calendar {
-    height: 100%;
+    flex: 1;
+    overflow: hidden;
 }
 
 /* List View */
@@ -326,6 +427,7 @@ button {
     display: flex;
     gap: var(--spacing-sm);
     margin-bottom: var(--spacing-sm);
+    flex-shrink: 0;
 }
 
 .list-controls input,
@@ -338,7 +440,8 @@ button {
 }
 
 .table-container {
-    overflow-x: auto;
+    overflow: auto;
+    flex: 1;
 }
 
 table {
@@ -361,6 +464,45 @@ th {
     background-color: var(--bg-color);
     text-transform: uppercase;
     letter-spacing: 0.025em;
+}
+
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--transition-fast);
+}
+
+th.sortable:hover {
+    background-color: var(--border-color);
+    color: var(--primary-color);
+}
+
+th.sortable .sort-indicator {
+    display: inline-block;
+    margin-left: 0.25rem;
+    opacity: 0.3;
+    font-size: 0.7rem;
+    transition: opacity var(--transition-fast);
+}
+
+th.sortable:hover .sort-indicator {
+    opacity: 0.6;
+}
+
+th.sortable.sort-asc .sort-indicator::before {
+    content: '↑';
+    opacity: 1;
+}
+
+th.sortable.sort-desc .sort-indicator::before {
+    content: '↓';
+    opacity: 1;
+}
+
+th.sortable.sort-asc .sort-indicator,
+th.sortable.sort-desc .sort-indicator {
+    opacity: 1;
+    color: var(--primary-color);
 }
 
 tr:hover {
@@ -506,6 +648,13 @@ table .icon-btn:hover {
     box-shadow: 0 0 0 2px var(--primary-light);
 }
 
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-lg);
+}
+
 .form-row {
     display: flex;
     gap: var(--spacing-md);
@@ -564,7 +713,7 @@ table .icon-btn:hover {
     top: 70px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1500;
+    z-index: 4000;
     width: 90%;
     max-width: 600px;
 }
@@ -1289,4 +1438,111 @@ tr.cancelled:hover {
     margin: 0;
     font-size: 1.5rem;
     color: var(--text-main);
+}
+
+/* Items View */
+#items-table th {
+    background-color: var(--bg-color);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.editable-cell {
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    position: relative;
+}
+
+.editable-cell:hover {
+    background-color: var(--bg-color);
+}
+
+.editable-cell:hover::after {
+    content: '✎';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    opacity: 0.5;
+}
+
+.editable-input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--primary-color);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+}
+
+/* Popover List */
+.popover-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.popover-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    font-size: 0.875rem;
+    color: var(--text-main);
+}
+
+.popover-item:hover {
+    background-color: var(--bg-color);
+    color: var(--primary-color);
+}
+
+.popover-item.selected {
+    background-color: var(--primary-light);
+    color: white;
+}
+
+/* FullCalendar Day Cell Hover */
+/* Remove hover effect from calendar container */
+#calendar:hover {
+    background: none !important;
+}
+
+/* Add hover effect to individual day cells */
+.fc-daygrid-day:hover {
+    background-color: rgba(26, 35, 126, 0.05);
+    transition: background-color var(--transition-fast);
+    cursor: pointer;
+}
+
+/* Actions Column */
+.actions-cell {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: center;
+}
+
+.actions-cell .icon-btn {
+    padding: 4px;
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    transition: color var(--transition-fast);
+}
+
+.actions-cell .edit-btn:hover {
+    color: var(--primary-color);
+}
+
+.actions-cell .delete-btn:hover {
+    color: var(--error);
+}
+}
+
+/* Add hover effect to time grid day cells */
+.fc-timegrid-col:hover {
+    background-color: rgba(26, 35, 126, 0.03);
+    transition: background-color var(--transition-fast);
 }

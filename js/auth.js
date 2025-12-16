@@ -14,40 +14,51 @@ const Auth = {
     user: null,
 
     init: () => {
-        // Check for existing session (no expiration)
-        const storedUser = localStorage.getItem('user_email');
-        if (storedUser) {
-            // Trust localStorage - user stays logged in indefinitely
-            Auth.user = storedUser;
-            Auth.onLoginSuccess();
+        // Listen for auth state changes
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                Auth.validateUser(user);
+            } else {
+                Auth.user = null;
+                document.getElementById('login-overlay').classList.add('active');
+                document.getElementById('app-container').classList.add('hidden');
+            }
+        });
+
+        // Initialize Google Sign-In button
+        const signinBtn = document.querySelector('.g_id_signin');
+        if (signinBtn) {
+            // Replace the div with a custom button since we aren't using the GSI iframe anymore
+            const btn = document.createElement('button');
+            btn.className = 'primary-btn';
+            btn.textContent = 'Sign in with Google';
+            btn.style.fontSize = '1.1rem';
+            btn.style.padding = '12px 24px';
+            btn.onclick = Auth.login;
+
+            signinBtn.parentNode.replaceChild(btn, signinBtn);
+
+            // Remove the g_id_onload div if it exists
+            const gidOnload = document.getElementById('g_id_onload');
+            if (gidOnload) gidOnload.remove();
         }
     },
 
-    handleCredentialResponse: (response) => {
-        try {
-            // Decode JWT
-            const payload = JSON.parse(atob(response.credential.split('.')[1]));
-            const email = payload.email;
-
-            Auth.validateUser(email);
-        } catch (e) {
-            console.error('Auth Error:', e);
-            Auth.showError('Authentication failed.');
-        }
+    login: () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider)
+            .catch((error) => {
+                console.error('Login Failed:', error);
+                Auth.showError(error.message);
+            });
     },
 
-    validateUser: (email) => {
-        // Hardcoded allowed email for this project as per context
-        // In a real scenario, we'd decode the obfuscated string.
-        // Context: "Access is granted only if the user's logged-in email exactly matches the decoded Admin Email."
-        // Context: "beacon85@greystar.com"
-
+    validateUser: (firebaseUser) => {
+        // Hardcoded allowed email for this project
         const ALLOWED_EMAIL = 'beacon85@greystar.com';
 
-        if (email === ALLOWED_EMAIL) {
-            Auth.user = email;
-            // Store in localStorage permanently (no expiration)
-            localStorage.setItem('user_email', email);
+        if (firebaseUser.email === ALLOWED_EMAIL) {
+            Auth.user = firebaseUser;
             Auth.onLoginSuccess();
         } else {
             Auth.showError('Access denied. Unauthorized email.');
@@ -66,11 +77,10 @@ const Auth = {
     },
 
     logout: () => {
-        Auth.user = null;
-        localStorage.removeItem('user_email');
-        document.getElementById('login-overlay').classList.add('active');
-        document.getElementById('app-container').classList.add('hidden');
-        google.accounts.id.disableAutoSelect();
+        auth.signOut().then(() => {
+            Auth.user = null;
+            window.location.reload();
+        });
     },
 
     showError: (msg) => {

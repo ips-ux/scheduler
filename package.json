@@ -20,6 +20,9 @@
   },
   "homepage": "https://github.com/ips-ux/scheduler#readme",
   "devDependencies": {
-    "live-server": "^1.2.2"
+    "live-server": "^1.2.0"
+  },
+  "dependencies": {
+    "firebase": "^12.6.0"
   }
 }
